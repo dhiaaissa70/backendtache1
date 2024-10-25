@@ -8,5 +8,6 @@ const AuthController =require ("../controllers/auth")
 router.route("/register").post(AuthController.register);
 
 router.route("/users_Role").post(AuthController.getUsersByRole); 
+router.route("/delete_user").delete(AuthController.deleteUserByUsername);
 
 module.exports = router;

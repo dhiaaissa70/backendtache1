@@ -109,3 +109,20 @@ exports.getUsersByRole = async (req, res, next) => {
         res.status(500).json({ success: false, message: "Erreur lors de la récupération des utilisateurs." });
     }
 };
+exports.deleteUserByUsername = async (req, res, next) => {
+    const { username } = req.body;
+
+    try {
+        const user = await User.findOneAndDelete({ username });
+
+        if (!user) {
+            return res.status(404).json({ success: false, message: "Utilisateur non trouvé" });
+        }
+
+        res.status(200).json({ success: true, message: "Utilisateur supprimé avec succès" });
+    } catch (error) {
+        console.error(error);
+        next(error);
+        res.status(500).json({ success: false, message: "Erreur lors de la suppression de l'utilisateur" });
+    }
+};
