@@ -88,3 +88,24 @@ exports.generateToken = (req) => {
 
     return token;
 };
+exports.getUsersByRole = async (req, res, next) => {
+    const { role } = req.body;
+
+    try {
+        const users = await User.find({ role });
+
+        if (users.length === 0) {
+            return res.status(404).json({ success: false, message: "Aucun utilisateur trouvé avec ce rôle." });
+        }
+
+        users.forEach(user => {
+            user.password = undefined;
+        });
+
+        res.status(200).json({ success: true, users });
+    } catch (error) {
+        console.error(error);
+        next(error);
+        res.status(500).json({ success: false, message: "Erreur lors de la récupération des utilisateurs." });
+    }
+};
