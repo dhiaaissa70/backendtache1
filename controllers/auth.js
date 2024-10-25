@@ -1,62 +1,50 @@
-// controllers/auth.js
 const bcrypt = require("bcrypt");
+const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 
 exports.register = async (req, res, next) => {
-    const {
-        nom,
-        prenom,
-        email,
-        datenaissance,
-        telephone,
-        adresse,
-    } = req.body;
+    const { username, password, role } = req.body;
 
     try {
-        const existingUser = await User.findOne({ email });
+        const existingUser = await User.findOne({ username });
         if (existingUser) {
             return res.status(200).json({ success: true, message: "Utilisateur déjà enregistré", user: existingUser });
         }
 
+        const hashedPassword = await bcrypt.hash(password, 10);
+
         const user = await User.create({
-            nom,
-            prenom,
-            email,
-            datenaissance,
-            telephone,
-            adresse,
+            username,
+            password: hashedPassword,
+            role: role || "user"  
         });
 
         res.status(201).json({ success: true, message: "Utilisateur ajouté avec succès", user });
     } catch (error) {
-        console.error(error); 
+        console.error(error);
         next(error);
         res.status(400).json({ success: false, message: "Erreur lors de l'ajout de l'utilisateur" });
     }
 };
 
-exports.updateUserByEmail = async (req, res, next) => {
-    const { email, nom, prenom, datenaissance, telephone, adresse, mot_passe } = req.body; 
+exports.updateUserByUsername = async (req, res, next) => {
+    const { username, password, role } = req.body;
 
-    console.log("Email reçu pour mise à jour:", email); 
+    console.log("Nom d'utilisateur reçu pour mise à jour:", username);
 
     try {
-        const existingUser = await User.findOne({ email: email.toLowerCase() }); 
-        console.log("Utilisateur trouvé:", existingUser); 
+        const existingUser = await User.findOne({ username });
+        console.log("Utilisateur trouvé:", existingUser);
 
         if (!existingUser) {
             return res.status(404).json({ success: false, message: "Utilisateur non trouvé" });
         }
 
-        existingUser.nom = nom || existingUser.nom;
-        existingUser.prenom = prenom || existingUser.prenom;
-        existingUser.datenaissance = datenaissance || existingUser.datenaissance;
-        existingUser.telephone = telephone || existingUser.telephone;
-        existingUser.adresse = adresse || existingUser.adresse;
+        existingUser.role = role || existingUser.role;
 
-        if (mot_passe) {
-            const hashedPassword = await bcrypt.hash(mot_passe, saltRounds);
-            existingUser.mot_passe = hashedPassword;
+        if (password) {
+            const hashedPassword = await bcrypt.hash(password, 10);
+            existingUser.password = hashedPassword;
         }
 
         await existingUser.save();
@@ -65,20 +53,21 @@ exports.updateUserByEmail = async (req, res, next) => {
     } catch (error) {
         console.error(error);
         next(error);
+        res.status(400).json({ success: false, message: "Erreur lors de la mise à jour de l'utilisateur" });
     }
 };
 
-exports.getUserByEmail = async (req, res, next) => {
-    const { email } = req.body; 
+exports.getUserByUsername = async (req, res, next) => {
+    const { username } = req.body;
 
     try {
-        const user = await User.findOne({ email: email.toLowerCase() });
+        const user = await User.findOne({ username });
         
         if (!user) {
             return res.status(404).json({ success: false, message: "Utilisateur non trouvé" });
         }
 
-        user.mot_passe = undefined; 
+        user.password = undefined;
 
         res.status(200).json({ success: true, user });
     } catch (error) {
@@ -88,18 +77,14 @@ exports.getUserByEmail = async (req, res, next) => {
     }
 };
 
-
-//tokens
-
-
 exports.generateToken = (req) => {
-    const { email } = req.body; 
+    const { username } = req.body;
 
     const payload = {
-      email: email
+        username: username
     };
 
     const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '1h' });
 
-    return token; 
+    return token;
 };

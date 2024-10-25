@@ -4,7 +4,7 @@ require('dotenv').config();
 mongoose.Promise = global.Promise;
 
 const connectDB = async () => {
-  console.log("MONGO_URI:", process.env.MONGO_URI); // Pour déboguer
+  console.log("MONGO_URI:", process.env.MONGO_URI); 
 
   try {
     const conn = await mongoose.connect(process.env.MONGO_URI, {
