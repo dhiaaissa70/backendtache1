@@ -2,48 +2,37 @@ const Transfer = require("../models/transfer");
 const User = require("../models/User");
 
 // Transfer between users (sender -> receiver)
-exports.transfer = async (req, res, next) => {
+exports.makeTransfer = async (req, res) => {
     const { senderUsername, receiverUsername, amount, type, note } = req.body;
 
-    if (!senderUsername || !receiverUsername || !amount || !type) {
-        return res.status(400).json({ success: false, message: "Les informations du transfert sont incomplètes" });
-    }
-
-    if (amount <= 0) {
-        return res.status(400).json({ success: false, message: "Montant invalide" });
-    }
-
     try {
-        // Find the sender and receiver users by their usernames
+        // Find the sender and receiver in the database
         const sender = await User.findOne({ username: senderUsername });
         const receiver = await User.findOne({ username: receiverUsername });
 
-        if (!sender) {
-            return res.status(404).json({ success: false, message: "Expéditeur non trouvé" });
-        }
-        if (!receiver) {
-            return res.status(404).json({ success: false, message: "Destinataire non trouvé" });
+        if (!sender || !receiver) {
+            return res.status(404).json({ message: "Sender or receiver not found." });
         }
 
-        // Ensure sender has enough balance to perform the transfer
+        // Check if sender has enough balance
         if (type === 'transfer' && sender.balance < amount) {
-            return res.status(400).json({ success: false, message: "Solde insuffisant pour l'expéditeur" });
+            return res.status(400).json({ message: "Insufficient balance." });
         }
 
-        // Handle sender's balance update (withdraw)
-        if (type === 'transfer') {
+        // Update the sender's balance (decrease)
+        if (type === 'transfer' || type === 'withdraw') {
             sender.balance -= amount;
+            await sender.save();
         }
 
-        // Handle receiver's balance update (deposit)
-        receiver.balance += amount;
+        // Update the receiver's balance (increase for transfers and deposits)
+        if (type === 'transfer' || type === 'deposit') {
+            receiver.balance += amount;
+            await receiver.save();
+        }
 
-        // Save updated balances
-        await sender.save();
-        await receiver.save();
-
-        // Create a new transfer record
-        const transfer = new Transfer({
+        // Log the transfer in the Transfer model
+        const newTransfer = new Transfer({
             senderId: sender._id,
             receiverId: receiver._id,
             type,
@@ -51,18 +40,18 @@ exports.transfer = async (req, res, next) => {
             note
         });
 
-        // Save the transfer record
-        await transfer.save();
+        await newTransfer.save();
 
-        res.status(200).json({ 
-            success: true, 
-            message: `Transfert ${type} réussi`, 
-            senderBalance: sender.balance, 
-            receiverBalance: receiver.balance 
+        // Respond with success and updated balances
+        res.status(200).json({
+            success: true,
+            senderBalance: sender.balance,
+            receiverBalance: receiver.balance,
+            message: `Transfer of ${amount} successful.`,
         });
     } catch (error) {
-        console.error("Erreur lors du transfert :", error);
-        next(error);
+        console.error("Transfer failed:", error);
+        res.status(500).json({ message: "Transfer failed." });
     }
 };
 
