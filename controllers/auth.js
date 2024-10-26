@@ -114,3 +114,22 @@ exports.deleteUserByUsername = async (req, res, next) => {
         next(error);
     }
 };
+exports.getAllUsers = async (req, res, next) => {
+    try {
+        const users = await User.find({});
+
+        if (users.length === 0) {
+            return res.status(404).json({ success: false, message: "Aucun utilisateur trouvé." });
+        }
+
+        // Masque le mot de passe pour chaque utilisateur
+        users.forEach(user => {
+            user.password = undefined;
+        });
+
+        res.status(200).json({ success: true, users });
+    } catch (error) {
+        console.error("Erreur lors de la récupération des utilisateurs :", error);
+        next(error);
+    }
+};
