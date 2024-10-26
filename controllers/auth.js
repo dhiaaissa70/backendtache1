@@ -27,6 +27,48 @@ exports.register = async (req, res, next) => {
     }
 };
 
+
+exports.login = async (req, res, next) => {
+    const { username, password } = req.body;
+
+    try {
+        
+        const user = await User.findOne({ username });
+        if (!user) {
+            return res.status(404).json({ success: false, message: "Utilisateur non trouvé" });
+        }
+
+       
+        const isPasswordValid = await bcrypt.compare(password, user.password);
+        if (!isPasswordValid) {
+            return res.status(401).json({ success: false, message: "Mot de passe incorrect" });
+        }
+
+        
+        const token = jwt.sign(
+            { username: user.username, role: user.role }, 
+            process.env.JWT_SECRET, 
+            { expiresIn: '1h' }
+        );
+
+        
+        user.password = undefined;
+
+       
+        res.status(200).json({
+            success: true,
+            message: "Connexion réussie",
+            token,
+            user
+        });
+    } catch (error) {
+        console.error("Erreur lors de la connexion :", error);
+        next(error);
+        res.status(500).json({ success: false, message: "Erreur lors de la connexion" });
+    }
+};
+
+
 exports.updateUserByUsername = async (req, res, next) => {
     const { username, password, role } = req.body;
 
