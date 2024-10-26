@@ -2,8 +2,13 @@ const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 
+// Registration Controller
 exports.register = async (req, res, next) => {
-    const { username, password, role } = req.body;
+    let { username, password, role } = req.body;
+
+    // Trim input values to avoid issues due to spaces
+    username = username.trim();
+    password = password.trim();
 
     try {
         // Check if the user already exists
@@ -14,6 +19,7 @@ exports.register = async (req, res, next) => {
 
         // Hash the password before saving
         const hashedPassword = await bcrypt.hash(password, 10);
+        console.log("Hashed Password:", hashedPassword);  // For debugging
 
         // Create and save the new user with the role
         const user = await User.create({
@@ -32,18 +38,25 @@ exports.register = async (req, res, next) => {
     }
 };
 
+// Login Controller
 exports.login = async (req, res, next) => {
-    const { username, password } = req.body;
+    let { username, password } = req.body;
+
+    // Trim input values to avoid issues due to spaces
+    username = username.trim();
+    password = password.trim();
 
     try {
         // Check if the user exists
         const user = await User.findOne({ username });
+        console.log("User found:", user);  // For debugging
         if (!user) {
             return res.status(404).json({ success: false, message: "Utilisateur non trouvé" });
         }
 
         // Compare the entered password with the hashed password in the database
         const isPasswordValid = await bcrypt.compare(password, user.password);
+        console.log("Is password valid:", isPasswordValid);  // For debugging
         if (!isPasswordValid) {
             return res.status(401).json({ success: false, message: "Mot de passe incorrect" });
         }
@@ -71,8 +84,15 @@ exports.login = async (req, res, next) => {
     }
 };
 
+// Update User Controller
 exports.updateUserByUsername = async (req, res, next) => {
-    const { username, password, role } = req.body;
+    let { username, password, role } = req.body;
+
+    // Trim input values to avoid issues due to spaces
+    username = username.trim();
+    if (password) {
+        password = password.trim();
+    }
 
     try {
         // Find the user by username
@@ -105,6 +125,7 @@ exports.updateUserByUsername = async (req, res, next) => {
     }
 };
 
+// Get User by Username Controller
 exports.getUserByUsername = async (req, res, next) => {
     const { username } = req.body;
 
@@ -126,6 +147,7 @@ exports.getUserByUsername = async (req, res, next) => {
     }
 };
 
+// Get Users by Role Controller
 exports.getUsersByRole = async (req, res, next) => {
     const { role } = req.body;
 
@@ -149,6 +171,7 @@ exports.getUsersByRole = async (req, res, next) => {
     }
 };
 
+// Delete User by Username Controller
 exports.deleteUserByUsername = async (req, res, next) => {
     const { username } = req.body;
 
