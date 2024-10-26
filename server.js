@@ -4,6 +4,7 @@ const connectDB = require("./config/db");
 const app = express();
 const port = 3001;
 const AuthRoute = require("./routes/auth");
+const TranferRoute = require("./routes/transfer");
 
 connectDB();
 
@@ -14,7 +15,7 @@ app.use(express.json());
 app.get('/', (req, res) => {
   res.send('le serveur est en marche');
 });
-
+app.use("/tr",TranferRoute)
 app.use("/auth",AuthRoute)
 
 // Démarrer le serveur
