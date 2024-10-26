@@ -170,24 +170,23 @@ exports.getUsersByRole = async (req, res, next) => {
     const { role } = req.body;
 
     try {
-        // Find users by role
         const users = await User.find({ role });
 
         if (users.length === 0) {
             return res.status(404).json({ success: false, message: "Aucun utilisateur trouvé avec ce rôle." });
         }
 
-        // Exclude password from each user object
         users.forEach(user => {
-            user.password = undefined;
+            user.password = undefined; // Exclude password
         });
 
         res.status(200).json({ success: true, users });
     } catch (error) {
         console.error("Erreur lors de la récupération des utilisateurs :", error);
-        next(error);  // Pass the error to middleware for handling
+        next(error);
     }
 };
+
 
 // Delete User by Username Controller
 exports.deleteUserByUsername = async (req, res, next) => {
