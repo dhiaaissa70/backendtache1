@@ -15,11 +15,6 @@ const UserSchema = new mongoose.Schema({
     type: String,
     enum: ["SuperAdmin", "Admin", "Partner", "Assistant", "User"], 
     default: "User"
-  },
-  balance: {
-    type: Number,
-    default: 1000, 
-    min: 0
   }
 });
 
