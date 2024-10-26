@@ -3,11 +3,10 @@ const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 
 // Registration Controller
-// Registration Controller
 exports.register = async (req, res, next) => {
     let { username, password, role } = req.body;
 
-    // Validate input (e.g., checking if username and password are non-empty)
+    // Validate input
     if (!username || !password) {
         return res.status(400).json({ success: false, message: "Nom d'utilisateur et mot de passe requis" });
     }
@@ -28,15 +27,19 @@ exports.register = async (req, res, next) => {
         console.log("Hashed Password during registration:", hashedPassword);  // For debugging
 
         // Create and save the new user with the role
-        const user = await User.create({
+        const user = new User({
             username,
-            password: hashedPassword,
+            password: hashedPassword,  // Save the hashed password
             role: role || "user"  // Default to "user" if no role is provided
         });
+
+        // Save the user to the database
+        await user.save();
 
         // Exclude password before returning user data
         user.password = undefined;
 
+        // Respond with the newly created user (excluding password)
         res.status(201).json({ success: true, message: "Utilisateur ajouté avec succès", user });
     } catch (error) {
         console.error("Erreur lors de l'enregistrement :", error);
