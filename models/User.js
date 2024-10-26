@@ -1,5 +1,4 @@
 const mongoose = require("mongoose");
-const bcrypt = require("bcrypt");
 
 const UserSchema = new mongoose.Schema({
   username: {
@@ -14,12 +13,10 @@ const UserSchema = new mongoose.Schema({
   },
   role: {
     type: String,
-    enum: ["SuperAdmin", "Admin", "Partner","Assistant","User"], 
+    enum: ["SuperAdmin", "Admin", "Partner", "Assistant", "User"], 
     default: "User"
   }
 });
-
-
 
 const User = mongoose.model("User", UserSchema);
 module.exports = User;
