@@ -3,8 +3,14 @@ const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 
 // Registration Controller
+// Registration Controller
 exports.register = async (req, res, next) => {
     let { username, password, role } = req.body;
+
+    // Validate input (e.g., checking if username and password are non-empty)
+    if (!username || !password) {
+        return res.status(400).json({ success: false, message: "Nom d'utilisateur et mot de passe requis" });
+    }
 
     // Trim input values to avoid issues due to spaces
     username = username.trim();
@@ -19,9 +25,9 @@ exports.register = async (req, res, next) => {
 
         // Hash the password before saving
         const hashedPassword = await bcrypt.hash(password, 10);
-        console.log("Hashed Password during registration:", hashedPassword);  // Log for debugging
+        console.log("Hashed Password during registration:", hashedPassword);  // For debugging
 
-        // Create and save the new user
+        // Create and save the new user with the role
         const user = await User.create({
             username,
             password: hashedPassword,
@@ -38,9 +44,16 @@ exports.register = async (req, res, next) => {
     }
 };
 
+
 // Login Controller
+
 exports.login = async (req, res, next) => {
     let { username, password } = req.body;
+
+    // Validate input
+    if (!username || !password) {
+        return res.status(400).json({ success: false, message: "Nom d'utilisateur et mot de passe requis" });
+    }
 
     // Trim input values to avoid issues due to spaces
     username = username.trim();
@@ -49,19 +62,15 @@ exports.login = async (req, res, next) => {
     try {
         // Check if the user exists
         const user = await User.findOne({ username });
-        console.log("User found in DB:", user);  // Log the user for debugging
+        console.log("User found:", user);  // For debugging
 
         if (!user) {
             return res.status(404).json({ success: false, message: "Utilisateur non trouvé" });
         }
 
-        // Log both passwords for debugging
-        console.log("Password entered for login:", password);
-        console.log("Stored hashed password in DB:", user.password);
-
         // Compare the entered password with the hashed password in the database
         const isPasswordValid = await bcrypt.compare(password, user.password);
-        console.log("Is password valid:", isPasswordValid);  // Log the comparison result
+        console.log("Is password valid:", isPasswordValid);  // For debugging
 
         if (!isPasswordValid) {
             return res.status(401).json({ success: false, message: "Mot de passe incorrect" });
@@ -71,7 +80,7 @@ exports.login = async (req, res, next) => {
         const token = jwt.sign(
             { username: user.username, role: user.role }, 
             process.env.JWT_SECRET, 
-            { expiresIn: '1h' }
+            { expiresIn: '1h' }  // Token valid for 1 hour
         );
 
         // Exclude the password from the returned user object
@@ -90,7 +99,7 @@ exports.login = async (req, res, next) => {
     }
 };
 
-// Update User Controller (Optional, if you need it)
+// Update User Controller
 exports.updateUserByUsername = async (req, res, next) => {
     let { username, password, role } = req.body;
 
@@ -131,24 +140,67 @@ exports.updateUserByUsername = async (req, res, next) => {
     }
 };
 
-// Utility: Manually reset password (Optional)
-exports.resetPassword = async (req, res, next) => {
-    const { username, newPassword } = req.body;
+// Get User by Username Controller
+exports.getUserByUsername = async (req, res, next) => {
+    const { username } = req.body;
 
     try {
+        // Find the user by username
         const user = await User.findOne({ username });
+        
         if (!user) {
             return res.status(404).json({ success: false, message: "Utilisateur non trouvé" });
         }
 
-        // Hash the new password and update the user
-        const hashedPassword = await bcrypt.hash(newPassword, 10);
-        user.password = hashedPassword;
+        // Exclude the password from the returned user object
+        user.password = undefined;
 
-        await user.save();
-        res.status(200).json({ success: true, message: "Mot de passe réinitialisé avec succès" });
+        res.status(200).json({ success: true, user });
     } catch (error) {
-        console.error("Erreur lors de la réinitialisation du mot de passe :", error);
+        console.error("Erreur lors de la récupération de l'utilisateur :", error);
+        next(error);  // Pass the error to middleware for handling
+    }
+};
+
+// Get Users by Role Controller
+exports.getUsersByRole = async (req, res, next) => {
+    const { role } = req.body;
+
+    try {
+        // Find users by role
+        const users = await User.find({ role });
+
+        if (users.length === 0) {
+            return res.status(404).json({ success: false, message: "Aucun utilisateur trouvé avec ce rôle." });
+        }
+
+        // Exclude password from each user object
+        users.forEach(user => {
+            user.password = undefined;
+        });
+
+        res.status(200).json({ success: true, users });
+    } catch (error) {
+        console.error("Erreur lors de la récupération des utilisateurs :", error);
+        next(error);  // Pass the error to middleware for handling
+    }
+};
+
+// Delete User by Username Controller
+exports.deleteUserByUsername = async (req, res, next) => {
+    const { username } = req.body;
+
+    try {
+        // Find and delete user by username
+        const user = await User.findOneAndDelete({ username });
+
+        if (!user) {
+            return res.status(404).json({ success: false, message: "Utilisateur non trouvé" });
+        }
+
+        res.status(200).json({ success: true, message: "Utilisateur supprimé avec succès" });
+    } catch (error) {
+        console.error("Erreur lors de la suppression de l'utilisateur :", error);
         next(error);  // Pass the error to middleware for handling
     }
 };
