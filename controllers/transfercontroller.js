@@ -3,64 +3,55 @@ const User = require("../models/User");
 
 // Transfer between users (sender -> receiver)
 exports.makeTransfer = async (req, res) => {
-    const { senderUsername, receiverUsername, amount, type, note } = req.body;
+    const { senderUsername, amount, type, note } = req.body;
 
     try {
+        // Find the sender (user performing the operation)
         const sender = await User.findOne({ username: senderUsername });
-        const receiver = type === 'transfer' ? await User.findOne({ username: receiverUsername }) : null;
 
-        // Check if sender exists
+        // Check if the sender exists
         if (!sender) {
             return res.status(404).json({ message: "Sender not found." });
         }
 
-        // Check if receiver exists (only for transfers)
-        if (type === 'transfer' && !receiver) {
-            return res.status(404).json({ message: "Receiver not found." });
-        }
-
-        // Ensure amount is valid
+        // Ensure the amount is valid
         if (amount <= 0) {
             return res.status(400).json({ message: "Amount must be greater than zero." });
         }
 
-        // Ensure sender has sufficient balance for withdrawals or transfers
-        if ((type === 'withdraw' || type === 'transfer') && sender.balance < amount) {
+        // Handle withdrawal: Ensure sender has enough balance
+        if (type === 'withdraw' && sender.balance < amount) {
             return res.status(400).json({ message: "Insufficient balance." });
         }
 
-        // Deduct amount from sender's balance for withdraw or transfer
-        if (type === 'withdraw' || type === 'transfer') {
-            sender.balance -= amount;
-            await sender.save();
+        // Perform the transaction: update sender's balance
+        if (type === 'deposit') {
+            sender.balance += amount;  // Add amount for deposits
+        } else if (type === 'withdraw') {
+            sender.balance -= amount;  // Subtract amount for withdrawals
         }
 
-        // Add amount to receiver's balance if it's a transfer
-        if (type === 'transfer' && receiver) {
-            receiver.balance += amount;
-            await receiver.save();
-        }
+        // Save updated balance
+        await sender.save();
 
-        // Log the transfer
+        // Log the transaction
         const transfer = new Transfer({
             senderId: sender._id,
-            receiverId: receiver ? receiver._id : null,
             type,
             amount,
             note
         });
         await transfer.save();
 
-        // Return success response
+        // Return the updated balance and success message
         return res.status(200).json({
             success: true,
             senderBalance: sender.balance,
-            receiverBalance: receiver ? receiver.balance : null,
-            message: `Transfer ${type} successful!`
+            message: `Transaction ${type} successful!`
         });
     } catch (error) {
-        console.error("Transfer error:", error);
-        return res.status(500).json({ message: "Transfer failed due to server error." });
+        console.error("Transaction error:", error);
+        return res.status(500).json({ message: "Transaction failed due to server error." });
     }
 };
 

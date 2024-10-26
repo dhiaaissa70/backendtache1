@@ -1,34 +1,28 @@
-const mongoose = require("mongoose");
+const mongoose = require('mongoose');
 
-// Define the TransferSchema to store each transaction (deposit/withdrawal)
 const TransferSchema = new mongoose.Schema({
-    senderId: {  // User initiating the transfer
-        type: mongoose.Schema.Types.ObjectId, 
-        ref: 'User',  // Reference to the User model
-        required: true 
+    senderId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        required: true
     },
-    receiverId: {  // User receiving the transfer
-        type: mongoose.Schema.Types.ObjectId, 
-        ref: 'User',  // Reference to the User model
-        required: true 
+    type: {
+        type: String,
+        enum: ['deposit', 'withdraw'],  // Only 'deposit' and 'withdraw'
+        required: true
     },
-    type: {  // Transfer type, can be deposit or withdraw
-        type: String, 
-        enum: ["deposit", "withdraw", "transfer"],  // Adding "transfer" for transfers between users
-        required: true 
+    amount: {
+        type: Number,
+        required: true
     },
-    amount: { 
-        type: Number, 
-        required: true 
+    note: {
+        type: String
     },
-    note: { 
-        type: String 
-    },
-    date: { 
-        type: Date, 
-        default: Date.now 
+    date: {
+        type: Date,
+        default: Date.now
     }
 });
 
-const Transfer = mongoose.model("Transfer", TransferSchema);
+const Transfer = mongoose.model('Transfer', TransferSchema);
 module.exports = Transfer;
