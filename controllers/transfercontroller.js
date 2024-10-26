@@ -1,12 +1,12 @@
 const Transfer = require("../models/transfer");
 const User = require("../models/User");
 
-// Transfer Controller
+// Transfer between users (sender -> receiver)
 exports.transfer = async (req, res, next) => {
-    const { username, amount, type, note } = req.body;
+    const { senderUsername, receiverUsername, amount, type, note } = req.body;
 
-    if (!username || !amount || !type) {
-        return res.status(400).json({ success: false, message: "Nom d'utilisateur, montant et type de transfert requis" });
+    if (!senderUsername || !receiverUsername || !amount || !type) {
+        return res.status(400).json({ success: false, message: "Les informations du transfert sont incomplètes" });
     }
 
     if (amount <= 0) {
@@ -14,33 +14,38 @@ exports.transfer = async (req, res, next) => {
     }
 
     try {
-        // Find the user by username
-        const user = await User.findOne({ username });
+        // Find the sender and receiver users by their usernames
+        const sender = await User.findOne({ username: senderUsername });
+        const receiver = await User.findOne({ username: receiverUsername });
 
-        if (!user) {
-            return res.status(404).json({ success: false, message: "Utilisateur non trouvé" });
+        if (!sender) {
+            return res.status(404).json({ success: false, message: "Expéditeur non trouvé" });
+        }
+        if (!receiver) {
+            return res.status(404).json({ success: false, message: "Destinataire non trouvé" });
         }
 
-        // Handle deposit
-        if (type === 'deposit') {
-            user.balance += amount;
-        }
-        // Handle withdrawal
-        else if (type === 'withdraw') {
-            if (user.balance < amount) {
-                return res.status(400).json({ success: false, message: "Solde insuffisant" });
-            }
-            user.balance -= amount;
-        } else {
-            return res.status(400).json({ success: false, message: "Type de transfert invalide" });
+        // Ensure sender has enough balance to perform the transfer
+        if (type === 'transfer' && sender.balance < amount) {
+            return res.status(400).json({ success: false, message: "Solde insuffisant pour l'expéditeur" });
         }
 
-        // Save the user's updated balance
-        await user.save();
+        // Handle sender's balance update (withdraw)
+        if (type === 'transfer') {
+            sender.balance -= amount;
+        }
 
-        // Create a new transfer record in the Transfer collection
+        // Handle receiver's balance update (deposit)
+        receiver.balance += amount;
+
+        // Save updated balances
+        await sender.save();
+        await receiver.save();
+
+        // Create a new transfer record
         const transfer = new Transfer({
-            userId: user._id,  // Reference to the User
+            senderId: sender._id,
+            receiverId: receiver._id,
             type,
             amount,
             note
@@ -49,14 +54,19 @@ exports.transfer = async (req, res, next) => {
         // Save the transfer record
         await transfer.save();
 
-        res.status(200).json({ success: true, message: `Transfert ${type} réussi`, balance: user.balance });
+        res.status(200).json({ 
+            success: true, 
+            message: `Transfert ${type} réussi`, 
+            senderBalance: sender.balance, 
+            receiverBalance: receiver.balance 
+        });
     } catch (error) {
         console.error("Erreur lors du transfert :", error);
         next(error);
     }
 };
 
-// Transfer History Controller
+// Get Transfer History (for sender or receiver)
 exports.getTransferHistory = async (req, res, next) => {
     const { username } = req.body;
 
@@ -68,8 +78,10 @@ exports.getTransferHistory = async (req, res, next) => {
             return res.status(404).json({ success: false, message: "Utilisateur non trouvé" });
         }
 
-        // Fetch all transfers for this user
-        const transfers = await Transfer.find({ userId: user._id });
+        // Fetch all transfers where the user is either the sender or the receiver
+        const transfers = await Transfer.find({
+            $or: [{ senderId: user._id }, { receiverId: user._id }]
+        });
 
         res.status(200).json({ success: true, transferHistory: transfers });
     } catch (error) {
