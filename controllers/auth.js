@@ -6,55 +6,57 @@ exports.register = async (req, res, next) => {
     const { username, password, role } = req.body;
 
     try {
+        // Check if the user already exists
         const existingUser = await User.findOne({ username });
         if (existingUser) {
-            return res.status(200).json({ success: true, message: "Utilisateur déjà enregistré", user: existingUser });
+            return res.status(409).json({ success: false, message: "Utilisateur déjà enregistré" });
         }
 
+        // Hash the password before saving
         const hashedPassword = await bcrypt.hash(password, 10);
 
+        // Create and save the new user with the role
         const user = await User.create({
             username,
             password: hashedPassword,
-            role: role || "user"  
+            role: role || "user"  // Default to "user" if no role is provided
         });
 
         res.status(201).json({ success: true, message: "Utilisateur ajouté avec succès", user });
     } catch (error) {
-        console.error(error);
+        console.error("Erreur lors de l'enregistrement :", error);
         next(error);
-        res.status(400).json({ success: false, message: "Erreur lors de l'ajout de l'utilisateur" });
+        res.status(500).json({ success: false, message: "Erreur lors de l'ajout de l'utilisateur" });
     }
 };
-
 
 exports.login = async (req, res, next) => {
     const { username, password } = req.body;
 
     try {
-        
+        // Check if the user exists
         const user = await User.findOne({ username });
         if (!user) {
             return res.status(404).json({ success: false, message: "Utilisateur non trouvé" });
         }
 
-       
+        // Compare the entered password with the hashed password in the database
         const isPasswordValid = await bcrypt.compare(password, user.password);
         if (!isPasswordValid) {
             return res.status(401).json({ success: false, message: "Mot de passe incorrect" });
         }
 
-        
+        // Generate a JWT token
         const token = jwt.sign(
             { username: user.username, role: user.role }, 
             process.env.JWT_SECRET, 
             { expiresIn: '1h' }
         );
 
-        
+        // Exclude the password from the returned user object
         user.password = undefined;
 
-       
+        // Return the token and user info
         res.status(200).json({
             success: true,
             message: "Connexion réussie",
@@ -68,7 +70,6 @@ exports.login = async (req, res, next) => {
     }
 };
 
-
 exports.updateUserByUsername = async (req, res, next) => {
     const { username, password, role } = req.body;
 
@@ -76,8 +77,6 @@ exports.updateUserByUsername = async (req, res, next) => {
 
     try {
         const existingUser = await User.findOne({ username });
-        console.log("Utilisateur trouvé:", existingUser);
-
         if (!existingUser) {
             return res.status(404).json({ success: false, message: "Utilisateur non trouvé" });
         }
@@ -119,17 +118,6 @@ exports.getUserByUsername = async (req, res, next) => {
     }
 };
 
-exports.generateToken = (req) => {
-    const { username } = req.body;
-
-    const payload = {
-        username: username
-    };
-
-    const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '1h' });
-
-    return token;
-};
 exports.getUsersByRole = async (req, res, next) => {
     const { role } = req.body;
 
@@ -151,6 +139,7 @@ exports.getUsersByRole = async (req, res, next) => {
         res.status(500).json({ success: false, message: "Erreur lors de la récupération des utilisateurs." });
     }
 };
+
 exports.deleteUserByUsername = async (req, res, next) => {
     const { username } = req.body;
 
