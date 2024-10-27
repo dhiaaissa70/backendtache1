@@ -62,9 +62,11 @@ exports.makeTransfer = async (req, res) => {
         });
     }
 };
-
+// Helper function to generate the start and end date ranges based on input
 const getDateFilter = (dateOption) => {
     let start, end;
+    
+    console.log("getDateFilter called with dateOption:", dateOption); // Log the input dateOption
 
     switch (dateOption) {
         case 'today':
@@ -84,33 +86,41 @@ const getDateFilter = (dateOption) => {
             end = moment().endOf('month').toDate();
             break;
         default:
-            // Custom date (Assume the dateOption is in YYYY-MM-DD format for custom dates)
+            // Assuming the dateOption is a custom date in YYYY-MM-DD format
             start = moment(dateOption).startOf('day').toDate();
             end = moment(dateOption).endOf('day').toDate();
             break;
     }
 
+    console.log("Generated start date:", start);
+    console.log("Generated end date:", end);
+
     return { start, end };
 };
 
-// Controller function
+// Controller function to get transfer history
 exports.getTransferHistory = async (req, res, next) => {
     const { username, date } = req.query;
 
     try {
+        console.log("Fetching transfer history for user:", username, "with date:", date); // Debugging log
+
         const user = await User.findOne({ username });
 
         if (!user) {
             return res.status(404).json({ success: false, message: "User not found." });
         }
 
-        // Apply date filter
+        // Apply the date filter
         const dateFilter = getDateFilter(date);
+        console.log("Date filter applied:", dateFilter);
 
         const transfers = await Transfer.find({
             senderId: user._id,
             date: { $gte: dateFilter.start, $lte: dateFilter.end }
         });
+
+        console.log("Fetched transfers:", transfers); // Log the results
 
         res.status(200).json({ success: true, transferHistory: transfers });
     } catch (error) {
