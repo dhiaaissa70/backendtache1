@@ -32,6 +32,8 @@ exports.makeTransfer = async (req, res) => {
             });
         }
         await receiver.save();
+        await sender.save();
+
 
         const newTransfer = new Transfer({
             senderId,
