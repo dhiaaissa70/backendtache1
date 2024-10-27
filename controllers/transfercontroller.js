@@ -1,5 +1,6 @@
 const Transfer = require("../models/transfer");
 const User = require("../models/User");
+const moment = require('moment');
 exports.makeTransfer = async (req, res) => {
     const { senderId, receiverId, type, amount, note } = req.body;
 
@@ -63,58 +64,51 @@ exports.makeTransfer = async (req, res) => {
 };
 
 const getDateFilter = (dateOption) => {
-    const now = new Date();
-    let startDate, endDate;
+    let start, end;
 
     switch (dateOption) {
         case 'today':
-            startDate = new Date(now.setHours(0, 0, 0, 0)); // Today, 00:00
-            endDate = new Date(now.setHours(23, 59, 59, 999)); // Today, 23:59
+            start = moment().startOf('day').toDate();
+            end = moment().endOf('day').toDate();
             break;
         case 'yesterday':
-            startDate = new Date(now.setDate(now.getDate() - 1));
-            startDate.setHours(0, 0, 0, 0); // Yesterday, 00:00
-            endDate = new Date(now.setHours(23, 59, 59, 999)); // Yesterday, 23:59
+            start = moment().subtract(1, 'days').startOf('day').toDate();
+            end = moment().subtract(1, 'days').endOf('day').toDate();
             break;
         case '7days':
-            endDate = new Date(now.setHours(23, 59, 59, 999)); // Current date, 23:59
-            startDate = new Date(now.setDate(now.getDate() - 7)); // 7 days ago, 00:00
-            startDate.setHours(0, 0, 0, 0);
+            start = moment().subtract(7, 'days').startOf('day').toDate();
+            end = moment().endOf('day').toDate();
             break;
         case 'month':
-            startDate = new Date(now.getFullYear(), now.getMonth(), 1); // First day of the month
-            startDate.setHours(0, 0, 0, 0);
-            endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0); // Last day of the month
-            endDate.setHours(23, 59, 59, 999);
+            start = moment().startOf('month').toDate();
+            end = moment().endOf('month').toDate();
             break;
         default:
-            // Custom or full range if not matched
-            startDate = new Date('1970-01-01'); // Beginning of time
-            endDate = new Date(); // Current date
+            // Custom date (Assume the dateOption is in YYYY-MM-DD format for custom dates)
+            start = moment(dateOption).startOf('day').toDate();
+            end = moment(dateOption).endOf('day').toDate();
             break;
     }
 
-    return { start: startDate, end: endDate };
+    return { start, end };
 };
 
-
+// Controller function
 exports.getTransferHistory = async (req, res, next) => {
     const { username, date } = req.query;
 
     try {
-        // Find the user by username
         const user = await User.findOne({ username });
 
         if (!user) {
             return res.status(404).json({ success: false, message: "User not found." });
         }
 
-        // Apply date filter using the getDateFilter helper
+        // Apply date filter
         const dateFilter = getDateFilter(date);
 
-        // Fetch transfers where the user is either the sender or the receiver, within the date range
         const transfers = await Transfer.find({
-            $or: [{ senderId: user._id }, { receiverId: user._id }],
+            senderId: user._id,
             date: { $gte: dateFilter.start, $lte: dateFilter.end }
         });
 
