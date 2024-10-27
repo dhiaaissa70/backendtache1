@@ -1,63 +1,69 @@
 const Transfer = require("../models/transfer");
 const User = require("../models/User");
-
-// Transfer between users (sender -> receiver)
 exports.makeTransfer = async (req, res) => {
-    const { senderUsername, amount, type, note } = req.body;
+    const { senderId, receiverId, type, amount, note } = req.body;
 
     try {
-        // Find the sender (user performing the operation)
-        const sender = await User.findOne({ username: senderUsername });
+        // Vérifiez si les utilisateurs existent
+        const sender = await User.findById(senderId);
+        const receiver = await User.findById(receiverId);
 
-        // Check if the sender exists
-        if (!sender) {
-            return res.status(404).json({ message: "Sender not found." });
+        if (!sender || !receiver) {
+            return res.status(404).json({
+                success: false,
+                message: "Sender or receiver not found"
+            });
         }
 
-        // Ensure the amount is valid
-        if (amount <= 0) {
-            return res.status(400).json({ message: "Amount must be greater than zero." });
-        }
-
-        // Handle withdrawal: Ensure sender has enough balance
-        if (type === 'withdraw' && sender.balance < amount) {
-            return res.status(400).json({ message: "Insufficient balance." });
-        }
-
-        // Perform the transaction: update sender's balance
         if (type === 'deposit') {
-            sender.balance += amount;  // Add amount for deposits
+            receiver.balance += amount; 
         } else if (type === 'withdraw') {
-            sender.balance -= amount;  // Subtract amount for withdrawals
+            if (receiver.balance < amount) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Insufficient balance for withdrawal"
+                });
+            }
+            receiver.balance -= amount; 
+        } else {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid transfer type"
+            });
         }
-
-        // Save updated balance
+        await receiver.save();
         await sender.save();
 
-        // Log the transaction
-        const transfer = new Transfer({
-            senderId: sender._id,
+
+        const newTransfer = new Transfer({
+            senderId,
+            receiverId,
             type,
             amount,
             note
         });
-        await transfer.save();
 
-        // Return the updated balance and success message
-        return res.status(200).json({
+        await newTransfer.save();
+
+        res.status(201).json({
             success: true,
-            senderBalance: sender.balance,
-            message: `Transaction ${type} successful!`
+            data: {
+                transfer: newTransfer,
+                updatedSender: sender,
+                updatedReceiver: receiver
+            }
         });
     } catch (error) {
-        console.error("Transaction error:", error);
-        return res.status(500).json({ message: "Transaction failed due to server error." });
+        console.error("Erreur lors de la création du transfert :", error);
+        res.status(400).json({
+            success: false,
+            message: error.message || "Une erreur est survenue lors de la création du transfert"
+        });
     }
 };
 
-// Get Transfer History (for sender or receiver)
 exports.getTransferHistory = async (req, res, next) => {
-    const { username, date } = req.query;
+    const { username } = req.body;
 
     try {
         const user = await User.findOne({ username });
@@ -66,10 +72,8 @@ exports.getTransferHistory = async (req, res, next) => {
             return res.status(404).json({ success: false, message: "User not found." });
         }
 
-        const dateFilter = getDateFilter(date); // Helper function to calculate date range based on 'today', '7days', etc.
         const transfers = await Transfer.find({
-            senderId: user._id,
-            date: { $gte: dateFilter.start, $lte: dateFilter.end }
+            $or: [{ senderId: user._id }, { receiverId: user._id }]
         });
 
         res.status(200).json({ success: true, transferHistory: transfers });
@@ -78,4 +82,3 @@ exports.getTransferHistory = async (req, res, next) => {
         return res.status(500).json({ message: "Error fetching transfer history." });
     }
 };
-
