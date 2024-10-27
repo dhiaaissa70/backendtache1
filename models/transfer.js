@@ -1,14 +1,12 @@
-const mongoose = require('mongoose');
-
 const TransferSchema = new mongoose.Schema({
     senderId: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'User', 
+        ref: 'User',
         required: true
     },
     receiverId: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'User', 
+        ref: 'User',
         required: true
     },
     type: {
@@ -21,12 +19,11 @@ const TransferSchema = new mongoose.Schema({
         required: true
     },
     note: {
-        type: String,
-        default: '' 
+        type: String
     },
     date: {
         type: Date,
-        default: Date.now 
+        default: Date.now
     }
 });
 
