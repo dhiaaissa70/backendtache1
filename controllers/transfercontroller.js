@@ -57,25 +57,25 @@ exports.makeTransfer = async (req, res) => {
 
 // Get Transfer History (for sender or receiver)
 exports.getTransferHistory = async (req, res, next) => {
-    const { username } = req.body;
+    const { username, date } = req.query;
 
     try {
-        // Find the user by username
         const user = await User.findOne({ username });
 
         if (!user) {
             return res.status(404).json({ success: false, message: "User not found." });
         }
 
-        // Fetch all transfers where the user is either the sender or the receiver
+        const dateFilter = getDateFilter(date); // Helper function to calculate date range based on 'today', '7days', etc.
         const transfers = await Transfer.find({
-            $or: [{ senderId: user._id }, { receiverId: user._id }]
+            senderId: user._id,
+            date: { $gte: dateFilter.start, $lte: dateFilter.end }
         });
 
-        // Return transfer history
         res.status(200).json({ success: true, transferHistory: transfers });
     } catch (error) {
         console.error("Error fetching transfer history:", error);
         return res.status(500).json({ message: "Error fetching transfer history." });
     }
 };
+
