@@ -18,6 +18,7 @@ exports.makeTransfer = async (req, res) => {
 
         if (type === 'deposit') {
             receiver.balance += amount; 
+            sender.balance -= amount; 
         } else if (type === 'withdraw') {
             if (receiver.balance < amount) {
                 return res.status(400).json({
@@ -26,6 +27,8 @@ exports.makeTransfer = async (req, res) => {
                 });
             }
             receiver.balance -= amount; 
+            sender.balance += amount; 
+
         } else {
             return res.status(400).json({
                 success: false,
