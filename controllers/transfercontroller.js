@@ -1,66 +1,39 @@
 const Transfer = require("../models/transfer");
 const User = require("../models/User");
 
-// Transfer between users (sender -> receiver)
 exports.makeTransfer = async (req, res) => {
-    const { senderId, receiverId, amount, note } = req.body;
+    const { senderId, receiverId, amount, note, type } = req.body;
 
-    // Vérification des paramètres requis
-    if (!senderId || !receiverId || !amount) {
+    // Validation de type
+    if (!['deposit', 'withdraw'].includes(type)) {
         return res.status(400).json({
             success: false,
-            message: "Les paramètres 'senderId', 'receiverId' et 'amount' sont requis."
+            message: 'Type de transfert invalide. Utilisez "deposit" ou "withdraw".'
         });
     }
 
     try {
-        // Trouver l'expéditeur et le destinataire
-        const sender = await User.findById(senderId);
-        const receiver = await User.findById(receiverId);
-
-        if (!sender || !receiver) {
-            return res.status(404).json({
-                success: false,
-                message: "L'expéditeur ou le destinataire n'a pas été trouvé."
-            });
-        }
-
-        // Vérifiez si l'expéditeur a suffisamment de fonds (ajoutez votre logique ici)
-        if (sender.balance < amount) {
-            return res.status(400).json({
-                success: false,
-                message: "Solde insuffisant pour effectuer le transfert."
-            });
-        }
-
-        // Effectuer le transfert
-        const transfer = new Transfer({
+        const newTransfer = new Transfer({
             senderId,
             receiverId,
-            type: 'transfer', // ou 'deposit', selon votre logique
             amount,
+            type,
             note
         });
 
-        await transfer.save();
-
-        // Mettre à jour les soldes des utilisateurs
-        sender.balance -= amount; // Déduire le montant du solde de l'expéditeur
-        receiver.balance += amount; // Ajouter le montant au solde du destinataire
-
-        await sender.save();
-        await receiver.save();
-
-        return res.status(201).json({
+        // Sauvegarder le transfert dans la base de données
+        await newTransfer.save();
+        
+        res.status(201).json({
             success: true,
-            message: "Transfert effectué avec succès.",
-            transfer
+            message: 'Transfert effectué avec succès',
+            transfer: newTransfer
         });
     } catch (error) {
-        console.error("Erreur lors de l'exécution du transfert :", error);
-        return res.status(500).json({
+        console.error("Erreur lors du transfert :", error);
+        res.status(500).json({
             success: false,
-            message: "Une erreur est survenue lors de l'exécution du transfert."
+            message: error.message || "Une erreur est survenue lors du transfert"
         });
     }
 };
