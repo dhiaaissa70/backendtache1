@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const TransferSchema = new mongoose.Schema({
     senderId: {
         type: mongoose.Schema.Types.ObjectId,
