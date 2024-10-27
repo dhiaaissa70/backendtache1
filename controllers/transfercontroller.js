@@ -24,14 +24,13 @@ exports.makeTransfer = async (req, res) => {
                     message: "Insufficient balance for withdrawal"
                 });
             }
-            sender.balance -= amount; 
+            receiver.balance -= amount; 
         } else {
             return res.status(400).json({
                 success: false,
                 message: "Invalid transfer type"
             });
         }
-        await sender.save();
         await receiver.save();
 
         const newTransfer = new Transfer({
