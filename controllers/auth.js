@@ -133,3 +133,24 @@ exports.getAllUsers = async (req, res, next) => {
         next(error);
     }
 };
+// Get User Balance Controller
+exports.getBalance = async (req, res, next) => {
+    const { username } = req.body; 
+
+    if (!username) {
+        return res.status(400).json({ success: false, message: "Nom d'utilisateur requis" });
+    }
+
+    try {
+        const user = await User.findOne({ username });
+
+        if (!user) {
+            return res.status(404).json({ success: false, message: "Utilisateur non trouvé" });
+        }
+
+        res.status(200).json({ success: true, balance: user.balance });
+    } catch (error) {
+        console.error("Erreur lors de la récupération du solde :", error);
+        next(error);
+    }
+};

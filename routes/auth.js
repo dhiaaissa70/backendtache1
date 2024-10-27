@@ -10,5 +10,6 @@ router.route("/usersByRole").post(AuthController.getUsersByRole);
 router.route("/getallusers").get(AuthController.getAllUsers); 
 router.route("/delete_user").delete(AuthController.deleteUserByUsername);
 router.route("/login").post(AuthController.login);
+router.route('/getbalance').get(AuthController.getBalance);
 
 module.exports = router;
