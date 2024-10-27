@@ -125,7 +125,7 @@ exports.getTransferHistory = async (req, res, next) => {
                 { receiverId: user._id }
             ],
             date: { $gte: dateFilter.start, $lte: dateFilter.end }
-        }).populate('senderId', 'username').populate('receiverId', 'username'); // Populate with usernames
+        }).populate('senderId', 'username','role').populate('receiverId', 'username','role'); // Populate with usernames
 
         console.log("Fetched transfers:", transfers);
 
