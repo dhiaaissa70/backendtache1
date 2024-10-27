@@ -4,7 +4,7 @@ const User = require("../models/User");
 
 // Registration Controller
 exports.register = async (req, res, next) => {
-    let { username, password, role } = req.body;
+    let { username, password, role, id } = req.body;
 
     if (!username || !password) {
         return res.status(400).json({ success: false, message: "Nom d'utilisateur et mot de passe requis" });
@@ -23,7 +23,8 @@ exports.register = async (req, res, next) => {
         const user = new User({
             username,
             password: hashedPassword,
-            role: role || "user"
+            role: role || "user",
+            createrid: id,
         });
 
         await user.save();
