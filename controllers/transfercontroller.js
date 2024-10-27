@@ -63,7 +63,7 @@ exports.makeTransfer = async (req, res) => {
 };
 
 exports.getTransferHistory = async (req, res, next) => {
-    const { username } = req.body;
+    const { username, date } = req.query;
 
     try {
         const user = await User.findOne({ username });
@@ -72,8 +72,10 @@ exports.getTransferHistory = async (req, res, next) => {
             return res.status(404).json({ success: false, message: "User not found." });
         }
 
+        const dateFilter = getDateFilter(date); // Helper function to calculate date range based on 'today', '7days', etc.
         const transfers = await Transfer.find({
-            $or: [{ senderId: user._id }, { receiverId: user._id }]
+            senderId: user._id,
+            date: { $gte: dateFilter.start, $lte: dateFilter.end }
         });
 
         res.status(200).json({ success: true, transferHistory: transfers });
