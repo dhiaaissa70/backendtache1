@@ -22,7 +22,7 @@ const TransferSchema = new mongoose.Schema({
     },
     note: {
         type: String,
-        default: '' /
+        default: '' 
     },
     date: {
         type: Date,
