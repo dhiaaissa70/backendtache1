@@ -18,7 +18,7 @@ exports.makeTransfer = async (req, res) => {
         if (type === 'deposit') {
             receiver.balance += amount; 
         } else if (type === 'withdraw') {
-            if (sender.balance < amount) {
+            if (receiver.balance < amount) {
                 return res.status(400).json({
                     success: false,
                     message: "Insufficient balance for withdrawal"
