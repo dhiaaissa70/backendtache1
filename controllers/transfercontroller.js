@@ -106,7 +106,7 @@ exports.getTransferHistory = async (req, res, next) => {
     const { username, date } = req.query;
 
     try {
-        console.log("Fetching transfer history for user:", username, "with date:", date); // Debugging log
+        console.log("Fetching transfer history for user:", username, "with date:", date);
 
         const user = await User.findOne({ username });
 
@@ -118,12 +118,16 @@ exports.getTransferHistory = async (req, res, next) => {
         const dateFilter = getDateFilter(date);
         console.log("Date filter applied:", dateFilter);
 
+        // Find transfers and populate senderId and receiverId with usernames
         const transfers = await Transfer.find({
-            senderId: user._id,
+            $or: [
+                { senderId: user._id },
+                { receiverId: user._id }
+            ],
             date: { $gte: dateFilter.start, $lte: dateFilter.end }
-        });
+        }).populate('senderId', 'username').populate('receiverId', 'username'); // Populate with usernames
 
-        console.log("Fetched transfers:", transfers); // Log the results
+        console.log("Fetched transfers:", transfers);
 
         res.status(200).json({ success: true, transferHistory: transfers });
     } catch (error) {
@@ -131,4 +135,5 @@ exports.getTransferHistory = async (req, res, next) => {
         return res.status(500).json({ message: "Error fetching transfer history." });
     }
 };
+
 
