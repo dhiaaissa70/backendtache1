@@ -1,13 +1,19 @@
 const Transfer = require("../models/transfer");
 const User = require("../models/User");
 const moment = require('moment');
+const mongoose = require('mongoose'); // Import mongoose to use ObjectId
+
 exports.makeTransfer = async (req, res) => {
     const { senderId, receiverId, type, amount, note } = req.body;
 
     try {
+        // Convert senderId and receiverId to ObjectId (if they are passed as strings)
+        const senderObjectId = mongoose.Types.ObjectId(senderId);
+        const receiverObjectId = mongoose.Types.ObjectId(receiverId);
+
         // Vérifiez si les utilisateurs existent
-        const sender = await User.findById(senderId);
-        const receiver = await User.findById(receiverId);
+        const sender = await User.findById(senderObjectId);
+        const receiver = await User.findById(receiverObjectId);
 
         if (!sender || !receiver) {
             return res.status(404).json({
@@ -16,18 +22,32 @@ exports.makeTransfer = async (req, res) => {
             });
         }
 
+        // Check the role of the sender
+        const senderIsSuperAdmin = sender.role === 'SuperPartner';
+
+        // Processing transfer type
         if (type === 'deposit') {
-            receiver.balance += amount; 
-            sender.balance -= amount; 
+            receiver.balance += amount;
+
+            // Deduct from sender only if the sender is not a SuperAdmin
+            if (!senderIsSuperAdmin) {
+                sender.balance -= amount;
+            }
         } else if (type === 'withdraw') {
+            // Ensure receiver has enough balance to withdraw
             if (receiver.balance < amount) {
                 return res.status(400).json({
                     success: false,
-                    message: "Insufficient balance for withdrawal"
+                    message: "Insufficient balance for withdrawa"
                 });
             }
-            receiver.balance -= amount; 
-            sender.balance += amount; 
+
+            receiver.balance -= amount;
+
+            // Add to sender's balance only if the sender is not a SuperAdmin
+            if (!senderIsSuperAdmin) {
+                sender.balance += amount;
+            }
 
         } else {
             return res.status(400).json({
@@ -35,13 +55,15 @@ exports.makeTransfer = async (req, res) => {
                 message: "Invalid transfer type"
             });
         }
+
+        // Save the updated balances for both users
         await receiver.save();
         await sender.save();
 
-
+        // Create the transfer record
         const newTransfer = new Transfer({
-            senderId,
-            receiverId,
+            senderId: sender._id, // Store actual ObjectId
+            receiverId: receiver._id, // Store actual ObjectId
             type,
             amount,
             note
@@ -65,6 +87,7 @@ exports.makeTransfer = async (req, res) => {
         });
     }
 };
+
 // Helper function to generate the start and end date ranges based on input
 const getDateFilter = (dateOption) => {
     let start, end;
