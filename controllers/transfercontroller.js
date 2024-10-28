@@ -3,7 +3,6 @@ const User = require("../models/User");
 const moment = require('moment');
 const mongoose = require('mongoose'); // Import mongoose to use ObjectId
 
-const mongoose = require('mongoose');  // Ensure mongoose is imported
 
 exports.makeTransfer = async (req, res) => {
     const { senderId, receiverId, type, amount, note } = req.body;
