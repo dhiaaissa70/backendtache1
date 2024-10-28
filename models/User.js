@@ -18,7 +18,7 @@ const UserSchema = new mongoose.Schema({
   },
   balance: {
     type: Number,
-    default: 1000, 
+    default: 0, 
     min: 0
   },
   createrid: {

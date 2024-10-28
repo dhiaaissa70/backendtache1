@@ -2,7 +2,7 @@ const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 
-// Registration Controller
+
 exports.register = async (req, res, next) => {
     let { username, password, role, id } = req.body;
 
@@ -37,7 +37,7 @@ exports.register = async (req, res, next) => {
     }
 };
 
-// Login Controller
+
 exports.login = async (req, res, next) => {
     let { username, password } = req.body;
 
@@ -123,7 +123,7 @@ exports.getAllUsers = async (req, res, next) => {
             return res.status(404).json({ success: false, message: "Aucun utilisateur trouvé." });
         }
 
-        // Masque le mot de passe pour chaque utilisateur
+     
         users.forEach(user => {
             user.password = undefined;
         });
@@ -134,7 +134,7 @@ exports.getAllUsers = async (req, res, next) => {
         next(error);
     }
 };
-// Get User Balance Controller
+
 exports.getBalance = async (req, res, next) => {
     const { username } = req.body; 
 
