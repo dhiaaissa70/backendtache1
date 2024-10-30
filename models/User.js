@@ -21,10 +21,10 @@ const UserSchema = new mongoose.Schema({
     default: 0, 
     min: 0
   },
-  createrid: {
-    type:String,
-    default: "",
-  },
+  createrid: { 
+    type: mongoose.Schema.Types.ObjectId,
+     ref: 'User' 
+    },
   userdate: { 
     type: Date,
     default: Date.now 
