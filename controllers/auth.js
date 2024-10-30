@@ -251,18 +251,21 @@ exports.getUserById = async (req, res, next) => {
 
 // Supprimer un utilisateur par ID
 exports.deleteUserById = async (req, res, next) => {
-    const { userId } = req.params; // Récupérer userId des paramètres de l'URL
-
+    const { id } = req.params; // Log the user ID being used
+    console.log("Deleting user with ID:", id);
+  
     try {
-        const user = await User.findByIdAndDelete(userId);
-
-        if (!user) {
-            return res.status(404).json({ success: false, message: "Utilisateur non trouvé" });
-        }
-
-        res.status(200).json({ success: true, message: "Utilisateur supprimé avec succès" });
+      const user = await User.findByIdAndDelete(id);
+      if (!user) {
+        console.log("User not found with ID:", id); // Log if the user is not found
+        return res.status(404).json({ success: false, message: "Utilisateur non trouvé" });
+      }
+  
+      res.status(200).json({ success: true, message: "Utilisateur supprimé avec succès" });
     } catch (error) {
-        console.error("Erreur lors de la suppression de l'utilisateur :", error);
-        next(error);
+      console.error("Erreur lors de la suppression de l'utilisateur :", error);
+      next(error);
     }
-};
+  };
+  
+  
