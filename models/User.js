@@ -21,7 +21,7 @@ const UserSchema = new mongoose.Schema({
     default: 1000, 
     min: 0
   },
-  userAdded: { 
+  userdate: { 
     type: Date,
     default: Date.now 
   }
