@@ -2,7 +2,7 @@ const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 
-
+// Enregistrement d'un nouvel utilisateur
 exports.register = async (req, res, next) => {
     let { username, password, role, id } = req.body;
 
@@ -37,7 +37,7 @@ exports.register = async (req, res, next) => {
     }
 };
 
-
+// Connexion d'un utilisateur
 exports.login = async (req, res, next) => {
     let { username, password } = req.body;
 
@@ -76,7 +76,7 @@ exports.login = async (req, res, next) => {
     }
 };
 
-// Get Users by Role Controller
+// Récupérer les utilisateurs par rôle
 exports.getUsersByRole = async (req, res, next) => {
     const { role } = req.body;
 
@@ -98,7 +98,7 @@ exports.getUsersByRole = async (req, res, next) => {
     }
 };
 
-// Delete User by Username Controller
+// Supprimer un utilisateur par nom d'utilisateur
 exports.deleteUserByUsername = async (req, res, next) => {
     const { username } = req.body;
 
@@ -115,10 +115,11 @@ exports.deleteUserByUsername = async (req, res, next) => {
         next(error);
     }
 };
+
+// Récupérer tous les utilisateurs
 exports.getAllUsers = async (req, res, next) => {
     try {
-        const users = await User.find({})
-            .populate('createrid', 'username role balance userdate'); 
+        const users = await User.find({}).populate('createrid', 'username role balance userdate');
 
         if (users.length === 0) {
             return res.status(404).json({ success: false, message: "Aucun utilisateur trouvé." });
@@ -129,8 +130,8 @@ exports.getAllUsers = async (req, res, next) => {
             username: user.username,
             role: user.role,
             balance: user.balance,
-            createrid: user.createrid ? user.createrid._id : null, 
-            creatorInfo: user.createrid ? {  
+            createrid: user.createrid ? user.createrid._id : null,
+            creatorInfo: user.createrid ? {
                 username: user.createrid.username,
                 role: user.createrid.role,
                 balance: user.createrid.balance,
@@ -139,7 +140,6 @@ exports.getAllUsers = async (req, res, next) => {
             userdate: user.userdate,
             __v: user.__v
         }));
-        
 
         res.status(200).json({ success: true, users: formattedUsers });
     } catch (error) {
@@ -148,10 +148,9 @@ exports.getAllUsers = async (req, res, next) => {
     }
 };
 
-
-
+// Récupérer le solde d'un utilisateur
 exports.getBalance = async (req, res, next) => {
-    const { username } = req.body; 
+    const { username } = req.body;
 
     if (!username) {
         return res.status(400).json({ success: false, message: "Nom d'utilisateur requis" });
@@ -171,35 +170,31 @@ exports.getBalance = async (req, res, next) => {
     }
 };
 
-
-// Get Users by CreaterId Controller
+// Récupérer les utilisateurs par createrid
 exports.getUsersByCreaterId = async (req, res, next) => {
-    const { createrid } = req.params; // Extract createrid from URL parameters
+    const { createrid } = req.params;
 
     try {
-        // Find users with the provided createrid
         const users = await User.find({ createrid });
 
-        // If no users are found, return 404
         if (users.length === 0) {
-            return res.status(404).json({ success: false, message: "No users found for this creater ID." });
+            return res.status(404).json({ success: false, message: "Aucun utilisateur trouvé pour cet ID créateur." });
         }
 
-        // Hide passwords before sending the response
         users.forEach(user => {
             user.password = undefined;
         });
 
-        // Return the list of users with the given createrid
         res.status(200).json({ success: true, users });
     } catch (error) {
-        console.error("Error fetching users by createrid:", error);
-        return res.status(500).json({ success: false, message: "Error fetching users." });
+        console.error("Erreur lors de la récupération des utilisateurs par ID créateur :", error);
+        next(error);
     }
 };
 
+// Mettre à jour un utilisateur
 exports.updateUser = async (req, res, next) => {
-    const { userId, username, role, balance } = req.body; 
+    const { userId, username, role, balance } = req.body;
 
     if (!userId) {
         return res.status(400).json({ success: false, message: "ID utilisateur requis" });
@@ -212,6 +207,7 @@ exports.updateUser = async (req, res, next) => {
             return res.status(404).json({ success: false, message: "Utilisateur non trouvé" });
         }
 
+        // Vérification si un nouveau nom d'utilisateur est fourni
         if (username && username !== user.username) {
             const existingUser = await User.findOne({ username });
             if (existingUser) {
@@ -221,15 +217,52 @@ exports.updateUser = async (req, res, next) => {
         }
 
         if (role) user.role = role;
-        if (balance !== undefined) user.balance = balance; 
+        if (balance !== undefined) user.balance = balance;
 
         await user.save();
-
-        user.password = undefined;
+        user.password = undefined; // Retirer le mot de passe avant d'envoyer la réponse
 
         res.status(200).json({ success: true, message: "Utilisateur mis à jour avec succès", user });
     } catch (error) {
         console.error("Erreur lors de la mise à jour de l'utilisateur :", error);
+        next(error);
+    }
+};
+
+// Récupérer un utilisateur par ID
+exports.getUserById = async (req, res, next) => {
+    const { id } = req.params;
+
+    try {
+        const user = await User.findById(id);
+
+        if (!user) {
+            return res.status(404).json({ success: false, message: "Utilisateur non trouvé" });
+        }
+
+        user.password = undefined; // Retirer le mot de passe avant d'envoyer la réponse
+
+        res.status(200).json({ success: true, user });
+    } catch (error) {
+        console.error("Erreur lors de la récupération de l'utilisateur :", error);
+        next(error);
+    }
+};
+
+// Supprimer un utilisateur par ID
+exports.deleteUserById = async (req, res, next) => {
+    const { userId } = req.params; // Récupérer userId des paramètres de l'URL
+
+    try {
+        const user = await User.findByIdAndDelete(userId);
+
+        if (!user) {
+            return res.status(404).json({ success: false, message: "Utilisateur non trouvé" });
+        }
+
+        res.status(200).json({ success: true, message: "Utilisateur supprimé avec succès" });
+    } catch (error) {
+        console.error("Erreur lors de la suppression de l'utilisateur :", error);
         next(error);
     }
 };
