@@ -1,13 +1,20 @@
 const Transfer = require("../models/transfer");
 const User = require("../models/User");
 const moment = require('moment');
+const mongoose = require('mongoose'); // Import mongoose to use ObjectId
+
+
 exports.makeTransfer = async (req, res) => {
     const { senderId, receiverId, type, amount, note } = req.body;
 
     try {
-        // Vérifiez si les utilisateurs existent
-        const sender = await User.findById(senderId);
-        const receiver = await User.findById(receiverId);
+        // Convert senderId and receiverId to ObjectId using 'new' keyword
+        const senderObjectId = new mongoose.Types.ObjectId(senderId);
+        const receiverObjectId = new mongoose.Types.ObjectId(receiverId);
+
+        // Check if sender and receiver exist
+        const sender = await User.findById(senderObjectId);
+        const receiver = await User.findById(receiverObjectId);
 
         if (!sender || !receiver) {
             return res.status(404).json({
@@ -16,32 +23,47 @@ exports.makeTransfer = async (req, res) => {
             });
         }
 
+        // Check if sender is a SuperPartner
+        const senderIsSuperPartner = sender.role === 'SuperPartner';
+
+        // Process the transfer
         if (type === 'deposit') {
-            receiver.balance += amount; 
-            sender.balance -= amount; 
+            receiver.balance += amount;
+
+            // Deduct from sender only if not a SuperPartner
+            if (!senderIsSuperPartner) {
+                sender.balance -= amount;
+            }
         } else if (type === 'withdraw') {
+            // Ensure receiver has enough balance for withdrawal
             if (receiver.balance < amount) {
                 return res.status(400).json({
                     success: false,
                     message: "Insufficient balance for withdrawal"
                 });
             }
-            receiver.balance -= amount; 
-            sender.balance += amount; 
 
+            receiver.balance -= amount;
+
+            // Add to sender's balance only if not a SuperPartner
+            if (!senderIsSuperPartner) {
+                sender.balance += amount;
+            }
         } else {
             return res.status(400).json({
                 success: false,
                 message: "Invalid transfer type"
             });
         }
-        await receiver.save();
+
+        // Save the updated balances for both sender and receiver
         await sender.save();
+        await receiver.save();
 
-
+        // Create the transfer record
         const newTransfer = new Transfer({
-            senderId,
-            receiverId,
+            senderId: sender._id,
+            receiverId: receiver._id,
             type,
             amount,
             note
@@ -58,13 +80,15 @@ exports.makeTransfer = async (req, res) => {
             }
         });
     } catch (error) {
-        console.error("Erreur lors de la création du transfert :", error);
+        console.error("Error during transfer creation:", error);
         res.status(400).json({
             success: false,
-            message: error.message || "Une erreur est survenue lors de la création du transfert"
+            message: error.message || "An error occurred during the transfer"
         });
     }
 };
+
+
 // Helper function to generate the start and end date ranges based on input
 const getDateFilter = (dateOption) => {
     let start, end;
@@ -106,7 +130,7 @@ exports.getTransferHistory = async (req, res, next) => {
     const { username, date } = req.query;
 
     try {
-        console.log("Fetching transfer history for user:", username, "with date:", date); // Debugging log
+        console.log("Fetching transfer history for user:", username, "with date:", date);
 
         const user = await User.findOne({ username });
 
@@ -118,12 +142,18 @@ exports.getTransferHistory = async (req, res, next) => {
         const dateFilter = getDateFilter(date);
         console.log("Date filter applied:", dateFilter);
 
+        // Find transfers and populate senderId and receiverId with usernames and roles
         const transfers = await Transfer.find({
-            senderId: user._id,
+            $or: [
+                { senderId: user._id },
+                { receiverId: user._id }
+            ],
             date: { $gte: dateFilter.start, $lte: dateFilter.end }
-        });
+        })
+        .populate('senderId', 'username role')  // Populate both username and role for senderId
+        .populate('receiverId', 'username role'); // Populate both username and role for receiverId
 
-        console.log("Fetched transfers:", transfers); // Log the results
+        console.log("Fetched transfers:", transfers);
 
         res.status(200).json({ success: true, transferHistory: transfers });
     } catch (error) {
@@ -131,4 +161,7 @@ exports.getTransferHistory = async (req, res, next) => {
         return res.status(500).json({ message: "Error fetching transfer history." });
     }
 };
+
+
+
 

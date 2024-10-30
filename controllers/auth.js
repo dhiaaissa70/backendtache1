@@ -2,9 +2,9 @@ const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 
-// Registration Controller
+
 exports.register = async (req, res, next) => {
-    let { username, password, role } = req.body;
+    let { username, password, role, id } = req.body;
 
     if (!username || !password) {
         return res.status(400).json({ success: false, message: "Nom d'utilisateur et mot de passe requis" });
@@ -23,7 +23,8 @@ exports.register = async (req, res, next) => {
         const user = new User({
             username,
             password: hashedPassword,
-            role: role || "user"
+            role: role || "user",
+            createrid: id,
         });
 
         await user.save();
@@ -36,7 +37,7 @@ exports.register = async (req, res, next) => {
     }
 };
 
-// Login Controller
+
 exports.login = async (req, res, next) => {
     let { username, password } = req.body;
 
@@ -122,7 +123,7 @@ exports.getAllUsers = async (req, res, next) => {
             return res.status(404).json({ success: false, message: "Aucun utilisateur trouvé." });
         }
 
-        // Masque le mot de passe pour chaque utilisateur
+     
         users.forEach(user => {
             user.password = undefined;
         });
@@ -133,7 +134,7 @@ exports.getAllUsers = async (req, res, next) => {
         next(error);
     }
 };
-// Get User Balance Controller
+
 exports.getBalance = async (req, res, next) => {
     const { username } = req.body; 
 
@@ -154,3 +155,31 @@ exports.getBalance = async (req, res, next) => {
         next(error);
     }
 };
+
+
+// Get Users by CreaterId Controller
+exports.getUsersByCreaterId = async (req, res, next) => {
+    const { createrid } = req.params; // Extract createrid from URL parameters
+
+    try {
+        // Find users with the provided createrid
+        const users = await User.find({ createrid });
+
+        // If no users are found, return 404
+        if (users.length === 0) {
+            return res.status(404).json({ success: false, message: "No users found for this creater ID." });
+        }
+
+        // Hide passwords before sending the response
+        users.forEach(user => {
+            user.password = undefined;
+        });
+
+        // Return the list of users with the given createrid
+        res.status(200).json({ success: true, users });
+    } catch (error) {
+        console.error("Error fetching users by createrid:", error);
+        return res.status(500).json({ success: false, message: "Error fetching users." });
+    }
+};
+
