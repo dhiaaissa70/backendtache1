@@ -13,13 +13,17 @@ const UserSchema = new mongoose.Schema({
   },
   role: {
     type: String,
-    enum: ["SuperAdmin", "Admin", "Partner", "Assistant", "User"], 
+    enum: ["SuperAdmin", "Admin", "Partner", "Assistant", "User","SuperPartner"], 
     default: "User"
   },
   balance: {
     type: Number,
-    default: 1000, 
+    default: 0, 
     min: 0
+  },
+  createrid: {
+    type:String,
+    default: "",
   },
   userdate: { 
     type: Date,

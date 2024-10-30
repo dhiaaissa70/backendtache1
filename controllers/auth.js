@@ -118,7 +118,7 @@ exports.deleteUserByUsername = async (req, res, next) => {
 exports.getAllUsers = async (req, res, next) => {
     try {
         const users = await User.find({})
-            .populate('userCreator') 
+            .populate('createrid') 
 
         if (users.length === 0) {
             return res.status(404).json({ success: false, message: "Aucun utilisateur trouvé." });
