@@ -118,7 +118,7 @@ exports.deleteUserByUsername = async (req, res, next) => {
 exports.getAllUsers = async (req, res, next) => {
     try {
         const users = await User.find({})
-            .populate('createrid', 'username role balance userdate'); // Peupler le champ createrid avec des informations spécifiques
+            .populate('createrid', 'username role balance userdate'); 
 
         if (users.length === 0) {
             return res.status(404).json({ success: false, message: "Aucun utilisateur trouvé." });
@@ -198,3 +198,38 @@ exports.getUsersByCreaterId = async (req, res, next) => {
     }
 };
 
+exports.updateUser = async (req, res, next) => {
+    const { userId, username, role, balance } = req.body; 
+
+    if (!userId) {
+        return res.status(400).json({ success: false, message: "ID utilisateur requis" });
+    }
+
+    try {
+        const user = await User.findById(userId);
+
+        if (!user) {
+            return res.status(404).json({ success: false, message: "Utilisateur non trouvé" });
+        }
+
+        if (username && username !== user.username) {
+            const existingUser = await User.findOne({ username });
+            if (existingUser) {
+                return res.status(409).json({ success: false, message: "Nom d'utilisateur déjà pris" });
+            }
+            user.username = username;
+        }
+
+        if (role) user.role = role;
+        if (balance !== undefined) user.balance = balance; 
+
+        await user.save();
+
+        user.password = undefined;
+
+        res.status(200).json({ success: true, message: "Utilisateur mis à jour avec succès", user });
+    } catch (error) {
+        console.error("Erreur lors de la mise à jour de l'utilisateur :", error);
+        next(error);
+    }
+};

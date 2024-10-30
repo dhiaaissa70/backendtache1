@@ -12,6 +12,7 @@ router.route("/delete_user").delete(AuthController.deleteUserByUsername);
 router.route("/login").post(AuthController.login);
 router.route('/getbalance').post(AuthController.getBalance);
 router.route('/usersByCreater/:createrid').get(AuthController.getUsersByCreaterId);
+router.route('/update').put(AuthController.updateUser);
 
 
 module.exports = router;
