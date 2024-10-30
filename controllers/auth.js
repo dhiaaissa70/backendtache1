@@ -118,22 +118,36 @@ exports.deleteUserByUsername = async (req, res, next) => {
 exports.getAllUsers = async (req, res, next) => {
     try {
         const users = await User.find({})
-            .populate('createrid') 
+            .populate('createrid', 'username role balance userdate'); // Peupler le champ createrid avec des informations spécifiques
 
         if (users.length === 0) {
             return res.status(404).json({ success: false, message: "Aucun utilisateur trouvé." });
         }
 
-        users.forEach(user => {
-            user.password = undefined;
-        });
+        // Formater les utilisateurs pour inclure creatorInfo tout en conservant createrid
+        const formattedUsers = users.map(user => ({
+            _id: user._id,
+            username: user.username,
+            role: user.role,
+            balance: user.balance,
+            createrid: user.createrid, 
+            creatorInfo: user.createrid ? { 
+                username: user.createrid.username,
+                role: user.createrid.role,
+                balance: user.createrid.balance,
+                userdate: user.createrid.userdate
+            } : null, 
+            userdate: user.userdate,
+            __v: user.__v
+        }));
 
-        res.status(200).json({ success: true, users });
+        res.status(200).json({ success: true, users: formattedUsers });
     } catch (error) {
         console.error("Erreur lors de la récupération des utilisateurs :", error);
         next(error);
     }
 };
+
 
 
 exports.getBalance = async (req, res, next) => {
