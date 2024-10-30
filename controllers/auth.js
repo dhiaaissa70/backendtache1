@@ -183,88 +183,66 @@ exports.getUsersByCreaterId = async (req, res, next) => {
     }
 };
 
-// Get User by ID Controller
 exports.getUserById = async (req, res, next) => {
-    const { id } = req.params; // Extract user ID from URL parameters
+    const { id } = req.params; // Get the user ID from the URL parameters
 
     try {
-        // Find the user by their unique ID (MongoDB ObjectId, assuming Mongoose)
+        // Find user by ID
         const user = await User.findById(id);
 
         if (!user) {
             return res.status(404).json({ success: false, message: "Utilisateur non trouvé" });
         }
 
-        // Hide sensitive information like the password
+        // Hide the password before sending the response
         user.password = undefined;
 
+        // Return the user details
         res.status(200).json({ success: true, user });
     } catch (error) {
         console.error("Erreur lors de la récupération de l'utilisateur :", error);
-        return res.status(500).json({ success: false, message: "Erreur lors de la récupération de l'utilisateur." });
+        next(error);
     }
 };
 
-
-
 exports.updateUserById = async (req, res, next) => {
-    const { id } = req.params; // Extract user ID from the URL parameters
-    const { username, password, role } = req.body; // Data to update
+    const { userId } = req.params; // Extract userId from URL parameters
+    const updatedDetails = req.body; // Get updated user details from the request body
 
     try {
-        // Find the user by ID
-        let user = await User.findById(id);
+        const user = await User.findByIdAndUpdate(userId, updatedDetails, { new: true });
 
         if (!user) {
             return res.status(404).json({ success: false, message: "Utilisateur non trouvé" });
         }
 
-        // Update username if provided
-        if (username) {
-            user.username = username.trim();
-        }
-
-        // Update password if provided and hash it
-        if (password) {
-            const hashedPassword = await bcrypt.hash(password, 10);
-            user.password = hashedPassword;
-        }
-
-        // Update role if provided
-        if (role) {
-            user.role = role;
-        }
-
-        // Save the updated user to the database
-        await user.save();
-
-        // Hide sensitive information before returning the response
-        user.password = undefined;
+        user.password = undefined; // Remove password from the returned user
 
         res.status(200).json({ success: true, message: "Utilisateur mis à jour avec succès", user });
     } catch (error) {
         console.error("Erreur lors de la mise à jour de l'utilisateur :", error);
-        return res.status(500).json({ success: false, message: "Erreur lors de la mise à jour de l'utilisateur." });
+        next(error);
     }
 };
 
-// 2. Delete User by ID Controller
-exports.deleteUserById = async (req, res, next) => {
-    const { id } = req.params; // Extract user ID from the URL parameters
-
+// Delete User by ID
+exports.deleteUserById = async (userId) => {
     try {
-        // Find and delete the user by ID
-        const user = await User.findByIdAndDelete(id);
+        const response = await fetch(`/api/delete_user/${userId}`, {
+            method: 'DELETE',
+        });
 
-        if (!user) {
-            return res.status(404).json({ success: false, message: "Utilisateur non trouvé" });
+        const data = await response.json();
+        if (data.success) {
+            console.log('User deleted successfully');
+            // Optionally update the UI or re-fetch user data
+        } else {
+            console.error('Error deleting user:', data.message);
         }
-
-        res.status(200).json({ success: true, message: "Utilisateur supprimé avec succès" });
     } catch (error) {
-        console.error("Erreur lors de la suppression de l'utilisateur :", error);
-        return res.status(500).json({ success: false, message: "Erreur lors de la suppression de l'utilisateur." });
+        console.error('Error:', error);
     }
 };
+
 
 
