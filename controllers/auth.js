@@ -267,5 +267,28 @@ exports.deleteUserById = async (req, res, next) => {
       next(error);
     }
   };
+
+  exports.getProfile = async (req, res, next) => {
+    const { username } = req.body; // Assume the username is passed in the request body
+
+    if (!username) {
+        return res.status(400).json({ success: false, message: "Nom d'utilisateur requis" });
+    }
+
+    try {
+        const user = await User.findOne({ username });
+
+        if (!user) {
+            return res.status(404).json({ success: false, message: "Utilisateur non trouvé" });
+        }
+
+        user.password = undefined; // Exclude the password from the response
+
+        res.status(200).json({ success: true, user });
+    } catch (error) {
+        console.error("Erreur lors de la récupération du profil de l'utilisateur :", error);
+        res.status(500).json({ success: false, message: "Une erreur est survenue lors de la récupération du profil" });
+    }
+};
   
   
