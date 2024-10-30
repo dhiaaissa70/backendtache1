@@ -163,5 +163,28 @@ exports.getTransferHistory = async (req, res, next) => {
 };
 
 
+exports.getAllTransfers = async (req, res) => {
+    try {
+        // Find all transfers and populate sender and receiver details
+        const transfers = await Transfer.find({})
+            .populate('senderId', 'username role') // Populate sender's username and role
+            .populate('receiverId', 'username role') // Populate receiver's username and role
+            .sort({ date: -1 }); // Sort by most recent transfers (you can adjust sorting if needed)
+
+        // Return the transfers with the populated details
+        res.status(200).json({
+            success: true,
+            transfers,
+        });
+    } catch (error) {
+        console.error("Error fetching all transfers:", error);
+        res.status(500).json({
+            success: false,
+            message: "An error occurred while fetching all transfers.",
+        });
+    }
+};
+
+
 
 
