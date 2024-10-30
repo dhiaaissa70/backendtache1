@@ -124,22 +124,22 @@ exports.getAllUsers = async (req, res, next) => {
             return res.status(404).json({ success: false, message: "Aucun utilisateur trouvé." });
         }
 
-        // Formater les utilisateurs pour inclure creatorInfo tout en conservant createrid
         const formattedUsers = users.map(user => ({
             _id: user._id,
             username: user.username,
             role: user.role,
             balance: user.balance,
-            createrid: user.createrid, 
-            creatorInfo: user.createrid ? { 
+            createrid: user.createrid ? user.createrid._id : null, 
+            creatorInfo: user.createrid ? {  
                 username: user.createrid.username,
                 role: user.createrid.role,
                 balance: user.createrid.balance,
                 userdate: user.createrid.userdate
-            } : null, 
+            } : null,
             userdate: user.userdate,
             __v: user.__v
         }));
+        
 
         res.status(200).json({ success: true, users: formattedUsers });
     } catch (error) {
