@@ -171,26 +171,50 @@ exports.getBalance = async (req, res, next) => {
 };
 
 // Récupérer les utilisateurs par createrid
+// Recursive function to get all users and their sub-users
+const fetchUserHierarchy = async (userId) => {
+    const users = await User.find({ createrid: userId });
+    
+    const userTree = await Promise.all(users.map(async (user) => {
+        // Fetch children of the current user
+        const children = await fetchUserHierarchy(user._id);
+        
+        // Exclude sensitive information
+        user = user.toObject(); // Convert Mongoose document to plain JavaScript object
+        user.password = undefined;
+        
+        return {
+            ...user,
+            children
+        };
+    }));
+
+    return userTree;
+};
+
+// Controller function to get the full user tree from the top level
 exports.getUsersByCreaterId = async (req, res, next) => {
     const { createrid } = req.params;
 
     try {
-        const users = await User.find({ createrid });
-
-        if (users.length === 0) {
-            return res.status(404).json({ success: false, message: "Aucun utilisateur trouvé pour cet ID créateur." });
+        // Find the root user (highest level in the hierarchy)
+        const rootUser = await User.findOne({ _id: createrid });
+        if (!rootUser) {
+            return res.status(404).json({ success: false, message: "Créateur introuvable." });
         }
 
-        users.forEach(user => {
-            user.password = undefined;
-        });
+        // Fetch the full user tree from the root user
+        const userHierarchy = await fetchUserHierarchy(rootUser._id);
 
-        res.status(200).json({ success: true, users });
+        // Return the root user with its full hierarchy
+        rootUser.password = undefined; // Exclude password for security
+        res.status(200).json({ success: true, user: { ...rootUser.toObject(), children: userHierarchy } });
     } catch (error) {
         console.error("Erreur lors de la récupération des utilisateurs par ID créateur :", error);
         next(error);
     }
 };
+
 
 // Mettre à jour un utilisateur
 exports.updateUser = async (req, res, next) => {
