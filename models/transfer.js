@@ -1,4 +1,3 @@
-const mongoose = require('mongoose');
 const TransferSchema = new mongoose.Schema({
     senderId: {
         type: mongoose.Schema.Types.ObjectId,
@@ -25,6 +24,14 @@ const TransferSchema = new mongoose.Schema({
     date: {
         type: Date,
         default: Date.now
+    },
+    balanceBefore: {
+        sender: { type: Number, required: true },
+        receiver: { type: Number, required: true }
+    },
+    balanceAfter: {
+        sender: { type: Number, required: true },
+        receiver: { type: Number, required: true }
     }
 });
 

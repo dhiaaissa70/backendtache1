@@ -8,7 +8,6 @@ exports.makeTransfer = async (req, res) => {
     const { senderId, receiverId, type, amount, note } = req.body;
 
     try {
-        // Convert senderId and receiverId to ObjectId using 'new' keyword
         const senderObjectId = new mongoose.Types.ObjectId(senderId);
         const receiverObjectId = new mongoose.Types.ObjectId(receiverId);
 
@@ -23,19 +22,20 @@ exports.makeTransfer = async (req, res) => {
             });
         }
 
-        // Check if sender is a SuperPartner
+        // Capture balances before transaction
+        const senderBalanceBefore = sender.balance;
+        const receiverBalanceBefore = receiver.balance;
+
         const senderIsSuperPartner = sender.role === 'SuperPartner';
 
         // Process the transfer
         if (type === 'deposit') {
             receiver.balance += amount;
 
-            // Deduct from sender only if not a SuperPartner
             if (!senderIsSuperPartner) {
                 sender.balance -= amount;
             }
         } else if (type === 'withdraw') {
-            // Ensure receiver has enough balance for withdrawal
             if (receiver.balance < amount) {
                 return res.status(400).json({
                     success: false,
@@ -45,7 +45,6 @@ exports.makeTransfer = async (req, res) => {
 
             receiver.balance -= amount;
 
-            // Add to sender's balance only if not a SuperPartner
             if (!senderIsSuperPartner) {
                 sender.balance += amount;
             }
@@ -56,17 +55,29 @@ exports.makeTransfer = async (req, res) => {
             });
         }
 
-        // Save the updated balances for both sender and receiver
+        // Capture balances after transaction
+        const senderBalanceAfter = sender.balance;
+        const receiverBalanceAfter = receiver.balance;
+
+        // Save the updated balances
         await sender.save();
         await receiver.save();
 
-        // Create the transfer record
+        // Create the transfer record with balanceBefore and balanceAfter
         const newTransfer = new Transfer({
             senderId: sender._id,
             receiverId: receiver._id,
             type,
             amount,
-            note
+            note,
+            balanceBefore: {
+                sender: senderBalanceBefore,
+                receiver: receiverBalanceBefore
+            },
+            balanceAfter: {
+                sender: senderBalanceAfter,
+                receiver: receiverBalanceAfter
+            }
         });
 
         await newTransfer.save();
