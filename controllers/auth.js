@@ -193,7 +193,7 @@ const fetchUserHierarchy = async (userId) => {
 };
 
 // Controller function to get the full user tree from the top level
-exports.getUsersByCreaterId = async (req, res, next) => {
+exports.fetchUsersByCreaterId = async (req, res, next) => {
     const { createrid } = req.params;
 
     try {
@@ -338,5 +338,30 @@ exports.fetchUsersByRole = async (req, res, next) => {
         next(error);
     }
 };
-  
+
+
+exports.getUsersByCreaterId = async (req, res, next) => {
+    const { createrid } = req.params; // Extract createrid from URL parameters
+
+    try {
+        // Find users with the provided createrid
+        const users = await User.find({ createrid });
+
+        // If no users are found, return 404
+        if (users.length === 0) {
+            return res.status(404).json({ success: false, message: "No users found for this creater ID." });
+        }
+
+        // Hide passwords before sending the response
+        users.forEach(user => {
+            user.password = undefined;
+        });
+
+        // Return the list of users with the given createrid
+        res.status(200).json({ success: true, users });
+    } catch (error) {
+        console.error("Error fetching users by createrid:", error);
+        return res.status(500).json({ success: false, message: "Error fetching users." });
+    }
+};
   
