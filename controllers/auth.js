@@ -330,15 +330,17 @@ exports.fetchUsersByCreaterId = async (req, res, next) => {
         }
 
         // Hide passwords before sending the response
-        users.forEach(user => {
-            user.password = undefined;
+        const sanitizedUsers = users.map(user => {
+            const userObject = user.toObject();
+            delete userObject.password;
+            return userObject;
         });
 
         // Return the list of users with the given createrid
-        res.status(200).json({ success: true, users });
+        return res.status(200).json({ success: true, users: sanitizedUsers });
     } catch (error) {
         console.error("Error fetching users by createrid:", error);
         return res.status(500).json({ success: false, message: "Error fetching users." });
     }
 };
-  
+
