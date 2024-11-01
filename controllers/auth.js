@@ -193,7 +193,7 @@ const fetchUserHierarchy = async (userId) => {
 };
 
 // Controller function to get the full user tree from the top level
-exports.fetchUsersByCreaterId = async (req, res, next) => {
+exports.getUsersByCreaterId = async (req, res, next) => {
     const { createrid } = req.params;
 
     try {
@@ -314,33 +314,10 @@ exports.deleteUserById = async (req, res, next) => {
         res.status(500).json({ success: false, message: "Une erreur est survenue lors de la récupération du profil" });
     }
 };
-
-exports.fetchUsersByRole = async (req, res, next) => {
-    const { role } = req.params; // use req.params to accept role as URL parameter
-
-    try {
-        const users = await User.find({ role });
-
-        if (users.length === 0) {
-            return res.status(404).json({ success: false, message: "No users found with this role." });
-        }
-
-        // Remove password field from each user
-        const sanitizedUsers = users.map(user => {
-            const userObject = user.toObject();
-            delete userObject.password;
-            return userObject;
-        });
-
-        res.status(200).json({ success: true, users: sanitizedUsers });
-    } catch (error) {
-        console.error("Error retrieving users:", error);
-        next(error);
-    }
-};
+  
 
 
-exports.getUsersByCreaterId = async (req, res, next) => {
+exports.fetchUsersByCreaterId = async (req, res, next) => {
     const { createrid } = req.params; // Extract createrid from URL parameters
 
     try {
