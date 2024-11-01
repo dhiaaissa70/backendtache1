@@ -16,6 +16,8 @@ router.route('/update').put(AuthController.updateUser);
 router.route("/delete_user/:id").delete(AuthController.deleteUserById); // New route for deleting user by ID
 router.route("/user/:id").get(AuthController.getUserById); // New route to get user by ID
 router.post('/profile', AuthController.getProfile); // POST instead of GET because we're passing the username in the body
+router.get('/users/role/:role', userController.fetchUsersByRole); // e.g., GET /users/role/admin
+
 
 
 module.exports = router;
