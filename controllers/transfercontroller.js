@@ -8,6 +8,17 @@ exports.makeTransfer = async (req, res) => {
     const { senderId, receiverId, type, amount, note } = req.body;
 
     try {
+        // Convertir amount en nombre
+        const transferAmount = Number(amount);
+
+        // Vérifier si la conversion a réussi
+        if (isNaN(transferAmount) || transferAmount <= 0) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid amount specified"
+            });
+        }
+
         const senderObjectId = new mongoose.Types.ObjectId(senderId);
         const receiverObjectId = new mongoose.Types.ObjectId(receiverId);
 
@@ -30,23 +41,23 @@ exports.makeTransfer = async (req, res) => {
 
         // Process the transfer
         if (type === 'deposit') {
-            receiver.balance += amount;
+            receiver.balance += transferAmount;
 
             if (!senderIsSuperPartner) {
-                sender.balance -= amount;
+                sender.balance -= transferAmount;
             }
         } else if (type === 'withdraw') {
-            if (receiver.balance < amount) {
+            if (receiver.balance < transferAmount) {
                 return res.status(400).json({
                     success: false,
                     message: "Insufficient balance for withdrawal"
                 });
             }
 
-            receiver.balance -= amount;
+            receiver.balance -= transferAmount;
 
             if (!senderIsSuperPartner) {
-                sender.balance += amount;
+                sender.balance += transferAmount;
             }
         } else {
             return res.status(400).json({
@@ -68,7 +79,7 @@ exports.makeTransfer = async (req, res) => {
             senderId: sender._id,
             receiverId: receiver._id,
             type,
-            amount,
+            amount: transferAmount, // Utiliser transferAmount ici
             note,
             balanceBefore: {
                 sender: senderBalanceBefore,
@@ -98,6 +109,7 @@ exports.makeTransfer = async (req, res) => {
         });
     }
 };
+
 
 
 // Helper function to generate the start and end date ranges based on input
