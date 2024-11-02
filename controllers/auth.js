@@ -218,7 +218,7 @@ exports.getUsersByCreaterId = async (req, res, next) => {
 
 // Mettre à jour un utilisateur
 exports.updateUser = async (req, res, next) => {
-    const { userId, username, role, balance } = req.body;
+    const { userId, username, role, balance, password } = req.body; // Ajoutez password ici
 
     if (!userId) {
         return res.status(400).json({ success: false, message: "ID utilisateur requis" });
@@ -243,6 +243,11 @@ exports.updateUser = async (req, res, next) => {
         if (role) user.role = role;
         if (balance !== undefined) user.balance = balance;
 
+        // Vérification si un nouveau mot de passe est fourni
+        if (password) {
+            user.password = await bcrypt.hash(password, 10); // Hachez le nouveau mot de passe
+        }
+
         await user.save();
         user.password = undefined; // Retirer le mot de passe avant d'envoyer la réponse
 
@@ -252,6 +257,7 @@ exports.updateUser = async (req, res, next) => {
         next(error);
     }
 };
+
 
 // Récupérer un utilisateur par ID
 exports.getUserById = async (req, res, next) => {
