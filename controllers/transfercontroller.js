@@ -3,15 +3,23 @@ const User = require("../models/User");
 const moment = require('moment');
 const mongoose = require('mongoose'); // Import mongoose to use ObjectId
 
+const FEE_RATE = 0.02; // 2% fee for the transaction
+
+// Calculate the transaction fee
+const calculateFee = (amount, userRole) => {
+    // Define special conditions for fee exemption or discounts
+    if (userRole === 'SuperPartner') return 0; // No fee for SuperPartners
+    return amount * FEE_RATE;
+};
 
 exports.makeTransfer = async (req, res) => {
     const { senderId, receiverId, type, amount, note } = req.body;
 
     try {
-        // Convertir amount en nombre
+        // Convert amount to a number
         const transferAmount = Number(amount);
 
-        // Vérifier si la conversion a réussi
+        // Validate the amount
         if (isNaN(transferAmount) || transferAmount <= 0) {
             return res.status(400).json({
                 success: false,
@@ -22,7 +30,7 @@ exports.makeTransfer = async (req, res) => {
         const senderObjectId = new mongoose.Types.ObjectId(senderId);
         const receiverObjectId = new mongoose.Types.ObjectId(receiverId);
 
-        // Check if sender and receiver exist
+        // Fetch sender and receiver
         const sender = await User.findById(senderObjectId);
         const receiver = await User.findById(receiverObjectId);
 
@@ -33,32 +41,29 @@ exports.makeTransfer = async (req, res) => {
             });
         }
 
-        // Capture balances before transaction
-        const senderBalanceBefore = sender.balance;
-        const receiverBalanceBefore = receiver.balance;
+        // Determine the fee and final transfer amount
+        const transactionFee = calculateFee(transferAmount, sender.role);
+        const totalAmount = transferAmount + transactionFee;
 
-        const senderIsSuperPartner = sender.role === 'SuperPartner';
-
-        // Process the transfer
+        // Check balances based on transaction type
         if (type === 'deposit') {
-            receiver.balance += transferAmount;
-
-            if (!senderIsSuperPartner) {
-                sender.balance -= transferAmount;
-            }
-        } else if (type === 'withdraw') {
-            if (receiver.balance < transferAmount) {
+            if (sender.balance < totalAmount && sender.role !== 'SuperPartner') {
                 return res.status(400).json({
                     success: false,
-                    message: "Insufficient balance for withdrawal"
+                    message: "Insufficient balance for deposit including fees"
                 });
             }
-
-            receiver.balance -= transferAmount;
-
-            if (!senderIsSuperPartner) {
-                sender.balance += transferAmount;
+            receiver.balance += transferAmount;
+            if (sender.role !== 'SuperPartner') sender.balance -= totalAmount;
+        } else if (type === 'withdraw') {
+            if (receiver.balance < totalAmount) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Insufficient balance for withdrawal including fees"
+                });
             }
+            receiver.balance -= transferAmount;
+            if (sender.role !== 'SuperPartner') sender.balance += transferAmount - transactionFee;
         } else {
             return res.status(400).json({
                 success: false,
@@ -70,20 +75,21 @@ exports.makeTransfer = async (req, res) => {
         const senderBalanceAfter = sender.balance;
         const receiverBalanceAfter = receiver.balance;
 
-        // Save the updated balances
+        // Save updated balances
         await sender.save();
         await receiver.save();
 
-        // Create the transfer record with balanceBefore and balanceAfter
+        // Create a new transfer record
         const newTransfer = new Transfer({
             senderId: sender._id,
             receiverId: receiver._id,
             type,
-            amount: transferAmount, // Utiliser transferAmount ici
+            amount: transferAmount,
+            fee: transactionFee,
             note,
             balanceBefore: {
-                sender: senderBalanceBefore,
-                receiver: receiverBalanceBefore
+                sender: sender.balance + totalAmount, // Add totalAmount to get initial balance
+                receiver: receiver.balance - transferAmount
             },
             balanceAfter: {
                 sender: senderBalanceAfter,
