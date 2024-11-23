@@ -4,8 +4,8 @@ export async function fetchDataFromEndpoint() {
     try {
         const url = "https://stage.game-program.com/api/seamless/provider";
         const payload = {
-            api_password: "xapitest",
-            api_login: "xapitest",
+            api_password: "5t0damXaAEdPmORycm",
+            api_login: "bemyguide_mc_s",
             method: "getGameList",
             show_systems: 0,
             show_additional: false,
