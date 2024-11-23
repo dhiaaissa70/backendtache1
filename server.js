@@ -5,6 +5,7 @@ const app = express();
 const port = 3001;
 const AuthRoute = require("./routes/auth");
 const TranferRoute = require("./routes/transfer");
+const EndpointRoute = require("./routes/endpoints")
 
 connectDB();
 
@@ -17,6 +18,8 @@ app.get('/', (req, res) => {
 });
 app.use("/tr",TranferRoute)
 app.use("/auth",AuthRoute)
+app.use("/api",EndpointRoute)
+
 
 
 // Démarrer le serveur

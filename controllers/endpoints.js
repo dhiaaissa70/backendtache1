@@ -1,6 +1,7 @@
-import axios from 'axios';
+const axios = require("axios");
 
-export async function fetchDataFromEndpoint() {
+// Fonction contrôleur
+exports.getlist = async (req, res) => {
     try {
         const url = "https://stage.game-program.com/api/seamless/provider";
         const payload = {
@@ -18,20 +19,10 @@ export async function fetchDataFromEndpoint() {
             },
         });
 
-        // Retourner les données récupérées
-        return response.data;
+        // Répondre avec les données récupérées
+        res.status(200).json({ success: true, data: response.data });
     } catch (error) {
         console.error('Erreur lors de la récupération des données :', error.message);
-        throw new Error('Impossible de récupérer les données depuis l\'endpoint.');
+        res.status(500).json({ success: false, message: 'Erreur lors de la récupération des données.' });
     }
-}
-
-// Exemple d'utilisation de la fonction
-(async () => {
-    try {
-        const data = await fetchDataFromEndpoint();
-        console.log('Données récupérées :', data);
-    } catch (error) {
-        console.error('Erreur :', error.message);
-    }
-})();
+};
