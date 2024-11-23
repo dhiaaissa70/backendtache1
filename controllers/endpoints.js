@@ -1,4 +1,4 @@
-const axios = require('axios');
+import axios from 'axios';
 
 export async function fetchDataFromEndpoint() {
     try {
@@ -22,7 +22,6 @@ export async function fetchDataFromEndpoint() {
         return response.data;
     } catch (error) {
         console.error('Erreur lors de la récupération des données :', error.message);
-        // Vous pouvez personnaliser le comportement en cas d'erreur, par exemple :
         throw new Error('Impossible de récupérer les données depuis l\'endpoint.');
     }
 }
