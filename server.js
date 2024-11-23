@@ -17,9 +17,7 @@ app.get('/', (req, res) => {
 });
 app.use("/tr",TranferRoute)
 app.use("/auth",AuthRoute)
-app.use('/api', (req, res) => {
-  res.send('Bienvenue sur l\'API !');
-});
+
 
 // Démarrer le serveur
 app.listen(port, () => {
