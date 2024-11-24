@@ -146,18 +146,21 @@ exports.getGame = async (req, res) => {
             });
         }
 
-        // Validate the presence of critical session fields
-        if (!gameData.data || !gameData.data.response) {
-            console.error("Missing or invalid game URL in provider response:", gameData);
+        // Extract required fields
+        const gameUrl = gameData.data.response || null;
+        const gamesessionId = gameData.data.gamesession_id || null;
+
+        // Ensure game URL is valid
+        if (!gameUrl) {
+            console.error("Invalid game URL in provider response:", gameData);
             return res.status(500).json({
                 success: false,
                 message: "Provider did not return a valid game URL.",
             });
         }
 
-        // Check if gamesession_id exists (if required)
-        const gamesessionId = gameData.data.gamesession_id || null; // Handle missing gamesession_id gracefully
-        if (!gamesessionId && !play_for_fun) {
+        // For real-money mode, `gamesession_id` must exist
+        if (!play_for_fun && !gamesessionId) {
             console.error("Missing gamesession_id for real-money mode:", gameData);
             return res.status(500).json({
                 success: false,
@@ -165,7 +168,7 @@ exports.getGame = async (req, res) => {
             });
         }
 
-        // Create a new game session in the database (only if gamesession_id exists)
+        // Create a new game session in the database (only for real-money mode)
         let gameSession = null;
         if (gamesessionId) {
             gameSession = await GameSession.create({
@@ -181,8 +184,8 @@ exports.getGame = async (req, res) => {
         res.status(200).json({
             success: true,
             data: {
-                gameUrl: gameData.data.response,
-                gamesessionId: gameSession ? gameSession._id : null, // Include session ID only if it was created
+                gameUrl,
+                gamesessionId: gameSession ? gameSession._id : null,
                 userBalance: user.balance,
             },
         });
