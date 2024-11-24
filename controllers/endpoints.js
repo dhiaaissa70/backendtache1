@@ -10,6 +10,7 @@ const API_USERNAME = process.env.API_USERNAME;
 async function callProviderAPI(payload) {
     const url = "https://stage.game-program.com/api/seamless/provider";
     try {
+        console.log("Calling Provider API with payload:", payload);
         const response = await axios.post(url, payload, {
             headers: {
                 "Content-Type": "application/json",
@@ -25,14 +26,30 @@ async function callProviderAPI(payload) {
             method: payload.method,
             error: error.response?.data || error.message,
         });
-        throw new Error("Failed to communicate with provider.");
+        throw new Error(
+            `Failed to communicate with provider for method ${payload.method}.`
+        );
     }
 }
 
+// Error handling helper
+function handleError(res, message, details = null, statusCode = 500) {
+    console.error("Error:", { message, details });
+    res.status(statusCode).json({
+        success: false,
+        message,
+        details,
+    });
+}
+
+// Main function to fetch the game URL
 exports.getGame = async (req, res) => {
     try {
         const { gameid, lang = "en", play_for_fun = false, homeurl, username } = req.body;
 
+        console.log("Incoming Request Body:", req.body);
+
+        // Validate input
         if (!gameid || typeof gameid !== "number") {
             return handleError(res, "Invalid or missing gameid.", null, 400);
         }
@@ -40,17 +57,31 @@ exports.getGame = async (req, res) => {
             return handleError(res, "Username is required.", null, 400);
         }
 
+        // Retrieve the user
         const user = await User.findOne({ username });
         if (!user) {
             return handleError(res, "User not found.", null, 404);
         }
 
+        console.log("User Retrieved:", user);
+
+        // Check balance if playing for real
         if (!play_for_fun && user.balance <= 0) {
             return handleError(res, "Insufficient balance.", null, 400);
         }
 
-        // Ensure player exists in the provider system
-        await ensurePlayerExists(username);
+        // Ensure the player exists in the provider system
+        const ensurePlayerPayload = {
+            api_password: API_PASSWORD,
+            api_login: API_USERNAME,
+            method: "ensurePlayerExists",
+            user_username: username,
+            user_password: username, // assuming password is the same as username (adjust if different)
+            currency: "EUR",
+        };
+        await callProviderAPI(ensurePlayerPayload);
+
+        console.log("Player ensured in provider system.");
 
         // Log in the player
         const loginPlayerPayload = {
@@ -62,6 +93,7 @@ exports.getGame = async (req, res) => {
             currency: "EUR",
         };
         const loginPlayerResponse = await callProviderAPI(loginPlayerPayload);
+
         console.log("LoginPlayer Response:", loginPlayerResponse);
 
         const sessionId = loginPlayerResponse.response?.sessionid;
@@ -83,12 +115,16 @@ exports.getGame = async (req, res) => {
             currency: "EUR",
         };
         const gameResponse = await callProviderAPI(gamePayload);
+
         console.log("GetGame Response:", gameResponse);
 
         const gameUrl = gameResponse.response;
         const gamesessionId = gameResponse.gamesession_id;
         if (!gameUrl || !gamesessionId) {
-            return handleError(res, "Provider did not return a valid game session or URL.");
+            return handleError(
+                res,
+                "Provider did not return a valid game session or URL."
+            );
         }
 
         // Create a game session
@@ -99,6 +135,8 @@ exports.getGame = async (req, res) => {
             sessionid: sessionId,
             balanceBefore: user.balance,
         });
+
+        console.log("GameSession Created:", gameSession);
 
         // Return the game session and URL
         res.status(200).json({
@@ -113,4 +151,3 @@ exports.getGame = async (req, res) => {
         handleError(res, "Error fetching game URL.", error.message);
     }
 };
-
