@@ -118,7 +118,7 @@ exports.getGame = async (req, res) => {
             lang,
             play_for_fun,
             user_username: username,
-            user_password: user.password, // Add this line to send the user's password
+            user_password: user.password, // Assuming plain text password is required
             homeurl: homeurl || "https://catch-me.bet",
             currency: "EUR",
         };
@@ -130,21 +130,32 @@ exports.getGame = async (req, res) => {
             },
         });
 
+        // Log the full response for debugging
+        console.log("Provider response:", response.data);
+
         const gameData = response.data;
-        if (gameData.error !== 0) {
+
+        // Check for errors in the provider's response
+        if (gameData.error !== 0 || !gameData.data || !gameData.data.response) {
             return res.status(500).json({
                 success: false,
-                message: "Failed to fetch game URL.",
+                message: "Provider did not return a valid game URL.",
                 error: gameData,
             });
+        }
+
+        // Check if gamesession_id is provided
+        const gamesessionId = gameData.data.gamesession_id || null;
+        if (!gamesessionId) {
+            console.warn("Missing gamesession_id in provider response.");
         }
 
         // Create a new game session in the database
         const gameSession = await GameSession.create({
             userId: user._id,
             gameId: gameid,
-            gamesession_id: gameData.data.gamesession_id,
-            sessionid: gameData.data.sessionid,
+            gamesession_id: gamesessionId, // This might be null
+            sessionid: gameData.data.sessionid || null,
             balanceBefore: user.balance,
         });
 
