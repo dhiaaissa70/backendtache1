@@ -93,11 +93,11 @@ exports.getGame = async (req, res) => {
         if (!gameid || typeof gameid !== "number") {
             return res.status(400).json({ success: false, message: "Invalid or missing gameid." });
         }
-        if (!username) {
-            return res.status(400).json({ success: false, message: "Username is required." });
+        if (!username || !plainPassword) {
+            return res.status(400).json({ success: false, message: "Username and plain password are required." });
         }
 
-        // Fetch the user from the database
+        // Fetch user from the database
         const user = await User.findOne({ username });
         if (!user) {
             return res.status(404).json({ success: false, message: "User not found." });
@@ -107,9 +107,6 @@ exports.getGame = async (req, res) => {
         if (!play_for_fun && user.balance <= 0) {
             return res.status(400).json({ success: false, message: "Insufficient balance." });
         }
-
-        // Use the provided plain text password
-        const userPassword = plainPassword || "defaultPasswordForIntegration"; // Placeholder for now
 
         // Build the API request payload
         const url = "https://stage.game-program.com/api/seamless/provider";
@@ -121,7 +118,7 @@ exports.getGame = async (req, res) => {
             lang,
             play_for_fun,
             user_username: username,
-            user_password: userPassword, // Pass the plain text password
+            user_password: plainPassword, // Send plain-text password
             homeurl: homeurl || "https://catch-me.bet",
             currency: "EUR",
         };
@@ -146,14 +143,11 @@ exports.getGame = async (req, res) => {
             });
         }
 
-        // Extract the gamesession_id (if available)
-        const gamesessionId = gameData.data.gamesession_id || null;
-
         // Create a new game session in the database
         const gameSession = await GameSession.create({
             userId: user._id,
             gameId: gameid,
-            gamesession_id: gamesessionId, // This might be null
+            gamesession_id: gameData.data.gamesession_id || null,
             sessionid: gameData.data.sessionid || null,
             balanceBefore: user.balance,
         });
