@@ -130,12 +130,15 @@ exports.getGame = async (req, res) => {
             });
         }
 
+        // Handle missing `gamesession_id` gracefully
+        const gamesessionId = gameResponse.gamesession_id || null;
+
         // Create a game session in your database
         const gameSession = await GameSession.create({
             userId: user._id,
             gameId: gameid,
-            gamesession_id: gameResponse.gamesession_id || null,
-            sessionid: sessionId || null,
+            gamesession_id: gamesessionId, // Use null if not provided
+            sessionid: sessionId || null, // Use sessionId if available
             balanceBefore: user.balance,
         });
 
