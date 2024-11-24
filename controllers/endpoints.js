@@ -1,116 +1,112 @@
 const axios = require("axios");
-const GameSession = require("../models/gamesession"); // Import GameSession model
-const User = require("../models/User"); // Import User model
+const User = require("../models/User");
+const GameSession = require("../models/gamesession");
 
 // Load environment variables
 const API_PASSWORD = process.env.API_PASSWORD;
 const API_USERNAME = process.env.API_USERNAME;
 
-// Fetch game list
-exports.getlist = async (req, res) => {
-    try {
-        const url = "https://stage.game-program.com/api/seamless/provider";
-        const payload = {
-            api_password: API_PASSWORD,
-            api_login: API_USERNAME,
-            method: "getGameList",
-            show_systems: 0,
-            show_additional: false,
-            currency: "EUR",
-        };
+// Helper function to call the provider's API
+async function callProviderAPI(payload) {
+    const url = "https://stage.game-program.com/api/seamless/provider";
+    const response = await axios.post(url, payload, {
+        headers: {
+            "Content-Type": "application/json",
+        },
+    });
+    return response.data;
+}
 
-        const response = await axios.post(url, payload, {
-            headers: {
-                'Content-Type': 'application/json',
-            },
-        });
-
-        if (response.data.error !== 0) {
-            return res.status(500).json({
-                success: false,
-                message: "Failed to fetch game list from provider.",
-                error: response.data,
-            });
-        }
-
-        res.status(200).json({ success: true, data: response.data.response });
-    } catch (error) {
-        console.error("Error fetching game list:", error.message);
-        res.status(500).json({ success: false, message: "Error fetching game list." });
-    }
-};
-
-
-exports.handleGameResults = async (req, res) => {
-    const { gamesession_id, result, amount } = req.body;
-
-    if (!gamesession_id || !result) {
-        return res.status(400).json({ success: false, message: "Missing gamesession_id or result." });
-    }
-
-    try {
-        // Find the game session
-        const gameSession = await GameSession.findOne({ gamesession_id });
-        if (!gameSession) {
-            return res.status(404).json({ success: false, message: "Game session not found." });
-        }
-
-        // Fetch the associated user
-        const user = await User.findById(gameSession.userId);
-        if (!user) {
-            return res.status(404).json({ success: false, message: "User not found." });
-        }
-
-        // Adjust the user's balance based on the result
-        if (result === "win") {
-            user.balance += amount; // Add winnings
-        } else if (result === "loss") {
-            user.balance -= amount; // Deduct losses
-        }
-
-        // Save the updated balance to the user
-        await user.save();
-
-        // Update the game session with results
-        gameSession.result = result;
-        gameSession.amount = amount;
-        gameSession.balanceAfter = user.balance; // Track balance after the session
-        await gameSession.save();
-
-        res.status(200).json({ success: true, message: "Game results processed successfully." });
-    } catch (error) {
-        console.error("Error processing game results:", error.message);
-        res.status(500).json({ success: false, message: "Error processing game results." });
-    }
-};
-
-// Fetch game embed URL and manage game sessions
 exports.getGame = async (req, res) => {
     try {
-        const { gameid, lang = "en", play_for_fun = false, homeurl, username, plainPassword } = req.body;
+        const { gameid, lang = "en", play_for_fun = false, homeurl, username } = req.body;
 
-        // Validate input
         if (!gameid || typeof gameid !== "number") {
             return res.status(400).json({ success: false, message: "Invalid or missing gameid." });
         }
-        if (!username || !plainPassword) {
-            return res.status(400).json({ success: false, message: "Username and plain password are required." });
+        if (!username) {
+            return res.status(400).json({ success: false, message: "Username is required." });
         }
 
-        // Fetch user from the database
+        // Fetch user from database
         const user = await User.findOne({ username });
         if (!user) {
             return res.status(404).json({ success: false, message: "User not found." });
         }
 
-        // Ensure sufficient balance for real-money games
+        // Validate the player's balance for real-money games
         if (!play_for_fun && user.balance <= 0) {
             return res.status(400).json({ success: false, message: "Insufficient balance." });
         }
 
-        // Build the API request payload
-        const url = "https://stage.game-program.com/api/seamless/provider";
-        const payload = {
+        // Step 1: Check if the player exists in the provider's system
+        const checkPlayerPayload = {
+            api_password: API_PASSWORD,
+            api_login: API_USERNAME,
+            method: "playerExists",
+            user_username: username,
+            currency: "EUR",
+        };
+
+        const checkPlayerResponse = await callProviderAPI(checkPlayerPayload);
+        console.log("PlayerExists Response:", checkPlayerResponse);
+
+        if (checkPlayerResponse.error !== 0) {
+            return res.status(500).json({
+                success: false,
+                message: "Failed to verify player existence.",
+                error: checkPlayerResponse,
+            });
+        }
+
+        // If the player does not exist, create the player
+        if (!checkPlayerResponse.response) {
+            const createPlayerPayload = {
+                api_password: API_PASSWORD,
+                api_login: API_USERNAME,
+                method: "createPlayer",
+                user_username: username,
+                user_password: username, // Use a constant or hashed password
+                currency: "EUR",
+            };
+
+            const createPlayerResponse = await callProviderAPI(createPlayerPayload);
+            console.log("CreatePlayer Response:", createPlayerResponse);
+
+            if (createPlayerResponse.error !== 0) {
+                return res.status(500).json({
+                    success: false,
+                    message: "Failed to create player.",
+                    error: createPlayerResponse,
+                });
+            }
+        }
+
+        // Step 2: Login the player
+        const loginPlayerPayload = {
+            api_password: API_PASSWORD,
+            api_login: API_USERNAME,
+            method: "loginPlayer",
+            user_username: username,
+            user_password: username, 
+            currency: "EUR",
+        };
+
+        const loginPlayerResponse = await callProviderAPI(loginPlayerPayload);
+        console.log("LoginPlayer Response:", loginPlayerResponse);
+
+        if (loginPlayerResponse.error !== 0) {
+            return res.status(500).json({
+                success: false,
+                message: "Failed to login player.",
+                error: loginPlayerResponse,
+            });
+        }
+
+        const sessionId = loginPlayerResponse.response.sessionid;
+
+        // Step 3: Fetch the game URL
+        const gamePayload = {
             api_password: API_PASSWORD,
             api_login: API_USERNAME,
             method: "getGame",
@@ -118,45 +114,36 @@ exports.getGame = async (req, res) => {
             lang,
             play_for_fun,
             user_username: username,
-            user_password: plainPassword, // Send plain-text password
+            user_password: username, // Use the same password
             homeurl: homeurl || "https://catch-me.bet",
             currency: "EUR",
         };
 
-        // Make the API call to fetch the game URL
-        const response = await axios.post(url, payload, {
-            headers: {
-                "Content-Type": "application/json",
-            },
-        });
+        const gameResponse = await callProviderAPI(gamePayload);
+        console.log("GetGame Response:", gameResponse);
 
-        console.log("Provider response:", response.data);
-
-        const gameData = response.data;
-
-        // Validate the response
-        if (gameData.error !== 0 || !gameData.data || !gameData.data.response) {
+        if (gameResponse.error !== 0 || !gameResponse.response) {
             return res.status(500).json({
                 success: false,
                 message: "Provider did not return a valid game URL.",
-                error: gameData,
+                error: gameResponse,
             });
         }
 
-        // Create a new game session in the database
+        // Create a game session in your database
         const gameSession = await GameSession.create({
             userId: user._id,
             gameId: gameid,
-            gamesession_id: gameData.data.gamesession_id || null,
-            sessionid: gameData.data.sessionid || null,
+            gamesession_id: gameResponse.gamesession_id || null,
+            sessionid: sessionId || null,
             balanceBefore: user.balance,
         });
 
-        // Respond with the game URL and session data
+        // Return the game URL and session details
         res.status(200).json({
             success: true,
             data: {
-                gameUrl: gameData.data.response,
+                gameUrl: gameResponse.response,
                 gamesessionId: gameSession._id,
                 userBalance: user.balance,
             },
@@ -166,5 +153,3 @@ exports.getGame = async (req, res) => {
         res.status(500).json({ success: false, message: "Error fetching game URL." });
     }
 };
-
-
