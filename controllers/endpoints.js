@@ -118,6 +118,7 @@ exports.getGame = async (req, res) => {
             lang,
             play_for_fun,
             user_username: username,
+            user_password: "mrgl", 
             homeurl: homeurl || "https://catch-me.bet",
             currency: "EUR",
         };
