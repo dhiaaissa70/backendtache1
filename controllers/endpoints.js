@@ -118,12 +118,10 @@ exports.getGame = async (req, res) => {
             lang,
             play_for_fun,
             user_username: username,
-            user_password: user.password, // Pass the user's hashed password
+            user_password: user.password, // Add this line to send the user's password
             homeurl: homeurl || "https://catch-me.bet",
             currency: "EUR",
         };
-
-        console.log("Sending payload to provider:", payload);
 
         // Fetch the game URL
         const response = await axios.post(url, payload, {
@@ -132,13 +130,8 @@ exports.getGame = async (req, res) => {
             },
         });
 
-        console.log("Provider response:", response.data);
-
-        const gameData = response.data || {}; // Handle missing data defensively
-
-        // Check for provider-level errors
+        const gameData = response.data;
         if (gameData.error !== 0) {
-            console.error("Error from provider:", gameData);
             return res.status(500).json({
                 success: false,
                 message: "Failed to fetch game URL.",
@@ -146,46 +139,21 @@ exports.getGame = async (req, res) => {
             });
         }
 
-        // Extract required fields
-        const gameUrl = gameData.response || null; // Game URL
-        const gamesessionId = gameData.gamesession_id || null;
-
-        // Ensure game URL is valid
-        if (!gameUrl) {
-            console.error("Missing or invalid game URL in provider response:", gameData);
-            return res.status(500).json({
-                success: false,
-                message: "Provider did not return a valid game URL.",
-            });
-        }
-
-        // For real-money mode, `gamesession_id` must exist
-        if (!play_for_fun && !gamesessionId) {
-            console.error("Missing gamesession_id for real-money mode:", gameData);
-            return res.status(500).json({
-                success: false,
-                message: "Missing gamesession_id for real-money mode.",
-            });
-        }
-
-        // Create a new game session in the database (only for real-money mode)
-        let gameSession = null;
-        if (gamesessionId) {
-            gameSession = await GameSession.create({
-                userId: user._id,
-                gameId: gameid,
-                gamesession_id: gamesessionId,
-                sessionid: gameData.sessionid,
-                balanceBefore: user.balance,
-            });
-        }
+        // Create a new game session in the database
+        const gameSession = await GameSession.create({
+            userId: user._id,
+            gameId: gameid,
+            gamesession_id: gameData.data.gamesession_id,
+            sessionid: gameData.data.sessionid,
+            balanceBefore: user.balance,
+        });
 
         // Respond with the game URL and session data
         res.status(200).json({
             success: true,
             data: {
-                gameUrl,
-                gamesessionId: gameSession ? gameSession._id : null,
+                gameUrl: gameData.data.response,
+                gamesessionId: gameSession._id,
                 userBalance: user.balance,
             },
         });
