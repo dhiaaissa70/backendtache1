@@ -19,10 +19,11 @@ exports.register = async (req, res, next) => {
             return res.status(409).json({ success: false, message: "Utilisateur déjà enregistré" });
         }
 
-        const hashedPassword = await bcrypt.hash(password, 10);
+        const hashedPassword = await bcrypt.hash(password, 10); // Hash the password for secure storage
+
         const user = new User({
             username,
-            password: hashedPassword,
+            password: hashedPassword, // Store the hashed password in the database
             role: role || "user",
             createrid: id,
         });
@@ -30,12 +31,16 @@ exports.register = async (req, res, next) => {
         await user.save();
         user.password = undefined;
 
+        // Send the plain text password (if needed) during game provider integration here
+        // but avoid storing it in the database.
+
         res.status(201).json({ success: true, message: "Utilisateur ajouté avec succès", user });
     } catch (error) {
         console.error("Erreur lors de l'enregistrement :", error);
         next(error);
     }
 };
+
 
 // Connexion d'un utilisateur
 exports.login = async (req, res, next) => {

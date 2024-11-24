@@ -87,17 +87,17 @@ exports.handleGameResults = async (req, res) => {
 // Fetch game embed URL and manage game sessions
 exports.getGame = async (req, res) => {
     try {
-        const { gameid, lang = 'en', play_for_fun = false, homeurl, username } = req.body;
+        const { gameid, lang = "en", play_for_fun = false, homeurl, username, plainPassword } = req.body;
 
         // Validate input
-        if (!gameid || typeof gameid !== 'number') {
+        if (!gameid || typeof gameid !== "number") {
             return res.status(400).json({ success: false, message: "Invalid or missing gameid." });
         }
         if (!username) {
             return res.status(400).json({ success: false, message: "Username is required." });
         }
 
-        // Fetch user from the database
+        // Fetch the user from the database
         const user = await User.findOne({ username });
         if (!user) {
             return res.status(404).json({ success: false, message: "User not found." });
@@ -107,6 +107,9 @@ exports.getGame = async (req, res) => {
         if (!play_for_fun && user.balance <= 0) {
             return res.status(400).json({ success: false, message: "Insufficient balance." });
         }
+
+        // Use the provided plain text password
+        const userPassword = plainPassword || "defaultPasswordForIntegration"; // Placeholder for now
 
         // Build the API request payload
         const url = "https://stage.game-program.com/api/seamless/provider";
@@ -118,24 +121,23 @@ exports.getGame = async (req, res) => {
             lang,
             play_for_fun,
             user_username: username,
-            user_password: user.password, // Assuming plain text password is required
+            user_password: userPassword, // Pass the plain text password
             homeurl: homeurl || "https://catch-me.bet",
             currency: "EUR",
         };
 
-        // Fetch the game URL
+        // Make the API call to fetch the game URL
         const response = await axios.post(url, payload, {
             headers: {
-                'Content-Type': 'application/json',
+                "Content-Type": "application/json",
             },
         });
 
-        // Log the full response for debugging
         console.log("Provider response:", response.data);
 
         const gameData = response.data;
 
-        // Check for errors in the provider's response
+        // Validate the response
         if (gameData.error !== 0 || !gameData.data || !gameData.data.response) {
             return res.status(500).json({
                 success: false,
@@ -144,11 +146,8 @@ exports.getGame = async (req, res) => {
             });
         }
 
-        // Check if gamesession_id is provided
+        // Extract the gamesession_id (if available)
         const gamesessionId = gameData.data.gamesession_id || null;
-        if (!gamesessionId) {
-            console.warn("Missing gamesession_id in provider response.");
-        }
 
         // Create a new game session in the database
         const gameSession = await GameSession.create({
