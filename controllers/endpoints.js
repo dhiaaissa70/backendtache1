@@ -135,6 +135,8 @@ exports.getGame = async (req, res) => {
         console.log("Provider response:", response.data);
 
         const gameData = response.data;
+
+        // Check for provider-level errors
         if (gameData.error !== 0) {
             console.error("Error from provider:", gameData);
             return res.status(500).json({
@@ -144,21 +146,43 @@ exports.getGame = async (req, res) => {
             });
         }
 
-        // Create a new game session in the database
-        const gameSession = await GameSession.create({
-            userId: user._id,
-            gameId: gameid,
-            gamesession_id: gameData.data.gamesession_id,
-            sessionid: gameData.data.sessionid,
-            balanceBefore: user.balance,
-        });
+        // Validate the presence of critical session fields
+        if (!gameData.data || !gameData.data.response) {
+            console.error("Missing or invalid game URL in provider response:", gameData);
+            return res.status(500).json({
+                success: false,
+                message: "Provider did not return a valid game URL.",
+            });
+        }
+
+        // Check if gamesession_id exists (if required)
+        const gamesessionId = gameData.data.gamesession_id || null; // Handle missing gamesession_id gracefully
+        if (!gamesessionId && !play_for_fun) {
+            console.error("Missing gamesession_id for real-money mode:", gameData);
+            return res.status(500).json({
+                success: false,
+                message: "Missing gamesession_id for real-money mode.",
+            });
+        }
+
+        // Create a new game session in the database (only if gamesession_id exists)
+        let gameSession = null;
+        if (gamesessionId) {
+            gameSession = await GameSession.create({
+                userId: user._id,
+                gameId: gameid,
+                gamesession_id: gamesessionId,
+                sessionid: gameData.data.sessionid,
+                balanceBefore: user.balance,
+            });
+        }
 
         // Respond with the game URL and session data
         res.status(200).json({
             success: true,
             data: {
                 gameUrl: gameData.data.response,
-                gamesessionId: gameSession._id,
+                gamesessionId: gameSession ? gameSession._id : null, // Include session ID only if it was created
                 userBalance: user.balance,
             },
         });
