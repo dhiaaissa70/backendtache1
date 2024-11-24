@@ -70,19 +70,6 @@ exports.getGame = async (req, res) => {
             return handleError(res, "Insufficient balance.", null, 400);
         }
 
-        // Ensure the player exists in the provider system
-        const ensurePlayerPayload = {
-            api_password: API_PASSWORD,
-            api_login: API_USERNAME,
-            method: "ensurePlayerExists",
-            user_username: username,
-            user_password: username, // assuming password is the same as username (adjust if different)
-            currency: "EUR",
-        };
-        await callProviderAPI(ensurePlayerPayload);
-
-        console.log("Player ensured in provider system.");
-
         // Log in the player
         const loginPlayerPayload = {
             api_password: API_PASSWORD,
