@@ -3,7 +3,7 @@ const router = express.Router();
 const endpointController = require("../controllers/endpoints");
 
 // Route POST to retrieve the game list
-//router.post("/getlist", endpointController.getlist);
+router.post("/getlist", endpointController.getlist);
 
 // Route POST to retrieve a specific game
 router.post("/get-game", endpointController.getGame);
