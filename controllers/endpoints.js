@@ -118,10 +118,12 @@ exports.getGame = async (req, res) => {
             lang,
             play_for_fun,
             user_username: username,
-            user_password: "mrgl", 
+            user_password: user.password, // Pass the user's hashed password
             homeurl: homeurl || "https://catch-me.bet",
             currency: "EUR",
         };
+
+        console.log("Sending payload to provider:", payload);
 
         // Fetch the game URL
         const response = await axios.post(url, payload, {
@@ -130,8 +132,11 @@ exports.getGame = async (req, res) => {
             },
         });
 
+        console.log("Provider response:", response.data);
+
         const gameData = response.data;
         if (gameData.error !== 0) {
+            console.error("Error from provider:", gameData);
             return res.status(500).json({
                 success: false,
                 message: "Failed to fetch game URL.",
@@ -162,3 +167,4 @@ exports.getGame = async (req, res) => {
         res.status(500).json({ success: false, message: "Error fetching game URL." });
     }
 };
+
