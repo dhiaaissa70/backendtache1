@@ -134,7 +134,7 @@ exports.getGame = async (req, res) => {
 
         console.log("Provider response:", response.data);
 
-        const gameData = response.data;
+        const gameData = response.data || {}; // Handle missing data defensively
 
         // Check for provider-level errors
         if (gameData.error !== 0) {
@@ -147,12 +147,12 @@ exports.getGame = async (req, res) => {
         }
 
         // Extract required fields
-        const gameUrl = gameData.data.response || null;
-        const gamesessionId = gameData.data.gamesession_id || null;
+        const gameUrl = gameData.response || null; // Game URL
+        const gamesessionId = gameData.gamesession_id || null;
 
         // Ensure game URL is valid
         if (!gameUrl) {
-            console.error("Invalid game URL in provider response:", gameData);
+            console.error("Missing or invalid game URL in provider response:", gameData);
             return res.status(500).json({
                 success: false,
                 message: "Provider did not return a valid game URL.",
@@ -175,7 +175,7 @@ exports.getGame = async (req, res) => {
                 userId: user._id,
                 gameId: gameid,
                 gamesession_id: gamesessionId,
-                sessionid: gameData.data.sessionid,
+                sessionid: gameData.sessionid,
                 balanceBefore: user.balance,
             });
         }
@@ -194,4 +194,5 @@ exports.getGame = async (req, res) => {
         res.status(500).json({ success: false, message: "Error fetching game URL." });
     }
 };
+
 
