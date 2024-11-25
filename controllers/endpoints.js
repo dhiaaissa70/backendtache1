@@ -5,6 +5,7 @@ const GameSession = require("../models/gamesession");
 // Load environment variables
 const API_PASSWORD = process.env.API_PASSWORD;
 const API_USERNAME = process.env.API_USERNAME;
+const SALT = process.env.API_SALT; // Assurez-vous que cette clé est dans votre fichier .env pour plus de sécurité
 
 // Helper function to call the provider's API
 async function callProviderAPI(payload) {
@@ -26,6 +27,11 @@ async function callProviderAPI(payload) {
             `Provider API Error for method ${payload.method}: ${error.response?.data?.message || error.message}`
         );
     }
+}
+function generateKeyHash(data) {
+    const hash = crypto.createHash("sha256"); // Utilisation de SHA-256
+    hash.update(data + SALT); // Combinaison des données et du sel
+    return hash.digest("hex"); // Retourne la clé hachée en format hexadécimal
 }
 
 
@@ -229,39 +235,52 @@ exports.getuserbalance = async (req, res) => {
 };
 
 
-
 exports.giveMoneytoUser = async (req, res) => {
     try {
-        const { username, password } = req.body;
+        const { username, password, amount, transactionid } = req.body;
 
         // Validation des données entrantes
         if (!username || !password) {
             return handleError(res, "Username et password sont requis.", null, 400);
         }
+        if (amount == null || isNaN(amount)) {
+            return handleError(res, "Un montant valide est requis.", null, 400);
+        }
+        if (!transactionid) {
+            return handleError(res, "Transaction ID est requis.", null, 400);
+        }
+
+        // Générer le hash basé sur les données
+        const keyHash = generateKeyHash(`${username}${amount}${transactionid}`);
 
         const payload = {
             api_password: API_PASSWORD,
             api_login: API_USERNAME,
-            method: "getPlayerBalance",
+            method: "giveMoney",
             user_username: username,
             user_password: password,
+            amount,
+            transactionid,
             currency: "EUR",
+            key_hash: keyHash, // Ajout du hash au payload
         };
 
         const response = await callProviderAPI(payload);
 
         if (response.error !== 0) {
-            return handleError(
-                res,
-                "Échec de la récupération du solde utilisateur auprès du fournisseur.",
-                response,
-                500
-            );
+            return res.status(500).json({
+                success: false,
+                message: "Échec de la transmission de fonds à l'utilisateur auprès du fournisseur.",
+                details: {
+                    error: response.error,
+                    providerMessage: response.message,
+                },
+            });
         }
 
         res.status(200).json({ success: true, data: response.response });
     } catch (error) {
-        handleError(res, "Erreur lors de la récupération du solde utilisateur.", error.message);
+        handleError(res, "Erreur lors de la transmission de fonds.", error.message);
     }
 };
 
