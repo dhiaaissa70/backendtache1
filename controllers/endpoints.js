@@ -1,10 +1,13 @@
 const axios = require("axios");
+const crypto = require("crypto");
 const User = require("../models/User");
 const GameSession = require("../models/gamesession");
+const { generateTransactionId, generateKey } = require("../utils/utils"); // Import utilities
 
 // Load environment variables
 const API_PASSWORD = process.env.API_PASSWORD;
 const API_USERNAME = process.env.API_USERNAME;
+const API_SALT = process.env.API_SALT;
 
 // Helper function to call the provider's API
 async function callProviderAPI(payload) {
@@ -28,16 +31,10 @@ async function callProviderAPI(payload) {
     }
 }
 
-
 // Error handler function
 function handleError(res, message, details = null, statusCode = 500) {
     console.error("Error:", { message, details });
     res.status(statusCode).json({ success: false, message, details });
-}
-
-// Utility function to generate unique transaction IDs
-function generateTransactionId() {
-    return `txn_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
 }
 
 // Route to fetch game list
@@ -75,28 +72,20 @@ exports.getGame = async (req, res) => {
         const { gameid, lang = "en", play_for_fun = false, homeurl, username } = req.body;
 
         // Validate input
-        if (!gameid || typeof gameid !== "number") {
-            return handleError(res, "Invalid or missing gameid.", null, 400);
-        }
-        if (!username) {
-            return handleError(res, "Username is required.", null, 400);
+        if (!gameid || !username) {
+            return handleError(res, "Invalid gameid or username.", null, 400);
         }
 
         // Fetch user
         const user = await User.findOne({ username });
-        if (!user) {
-            return handleError(res, "User not found.", null, 404);
-        }
+        if (!user) return handleError(res, "User not found.", null, 404);
 
-        console.log(`User balance before API call: ${user.balance}`);
-
-        // Ensure sufficient balance for real-money play
         if (!play_for_fun && user.balance <= 0) {
             return handleError(res, "Insufficient balance.", null, 400);
         }
 
         // Step 1: Login Player
-        const loginPlayerPayload = {
+        const loginPayload = {
             api_password: API_PASSWORD,
             api_login: API_USERNAME,
             method: "loginPlayer",
@@ -104,19 +93,13 @@ exports.getGame = async (req, res) => {
             user_password: username,
             currency: "EUR",
         };
-        console.log("[DEBUG] loginPlayerPayload:", loginPlayerPayload);
 
-        const loginPlayerResponse = await callProviderAPI(loginPlayerPayload);
+        const loginResponse = await callProviderAPI(loginPayload);
 
-        console.log("[DEBUG] loginPlayerResponse:", loginPlayerResponse);
-
-        const sessionId = loginPlayerResponse.response?.sessionid;
-
+        const sessionId = loginResponse.response?.sessionid;
         if (!sessionId) {
             return handleError(res, "Provider login failed. Missing session ID.");
         }
-
-        console.log(`[DEBUG] Session ID: ${sessionId}`);
 
         // Step 2: Get Game Session
         const gamePayload = {
@@ -132,11 +115,8 @@ exports.getGame = async (req, res) => {
             homeurl: homeurl || "https://catch-me.bet",
             currency: "EUR",
         };
-        console.log("[DEBUG] gamePayload:", gamePayload);
 
         const gameResponse = await callProviderAPI(gamePayload);
-
-        console.log("[DEBUG] gameResponse:", gameResponse);
 
         const gameUrl = gameResponse.response;
         const gamesessionId = gameResponse.gamesession_id;
@@ -149,33 +129,9 @@ exports.getGame = async (req, res) => {
             );
         }
 
-        console.log(`[DEBUG] gameUrl from provider: ${gameUrl}`);
-        console.log(`[DEBUG] gamesessionId from provider: ${gamesessionId}`);
-
-        // Step 3: Validate and Decode gameUrl
-        const decodedGameUrl = decodeURIComponent(gameUrl);
-        console.log(`[DEBUG] Decoded gameUrl: ${decodedGameUrl}`);
-
-        if (!decodedGameUrl.includes("key=") || !decodedGameUrl.includes("sessionid=")) {
-            console.error("[ERROR] gameUrl missing required parameters:", decodedGameUrl);
-            return handleError(
-                res,
-                "Game URL is missing required parameters. Please check the provider response.",
-                gameResponse,
-                400
-            );
-        }
-
-        // Optional: Extract and log key query parameters from the URL for debugging
-        const urlParams = new URLSearchParams(decodedGameUrl.split("?")[1]);
-        console.log("[DEBUG] Extracted URL Parameters:");
-        for (const [key, value] of urlParams.entries()) {
-            console.log(`  ${key}: ${value}`);
-        }
-
-        // Append additional parameters if required
-        const finalGameUrl = `${gameUrl}&sessionid=${sessionId}`;
-        console.log(`[DEBUG] Final gameUrl: ${finalGameUrl}`);
+        // Generate and append SHA1 `key` for the game URL
+        const finalGameUrl = `${gameUrl}&key=${generateKey(gamePayload, API_SALT)}`;
+        console.log(`[DEBUG] Final game URL with key: ${finalGameUrl}`);
 
         // Return game URL and balance
         res.status(200).json({
@@ -192,14 +148,13 @@ exports.getGame = async (req, res) => {
     }
 };
 
-
+// Get user balance
 exports.getuserbalance = async (req, res) => {
     try {
         const { username, password } = req.body;
 
-        // Validation des données entrantes
         if (!username || !password) {
-            return handleError(res, "Username et password sont requis.", null, 400);
+            return handleError(res, "Username and password are required.", null, 400);
         }
 
         const payload = {
@@ -216,7 +171,7 @@ exports.getuserbalance = async (req, res) => {
         if (response.error !== 0) {
             return handleError(
                 res,
-                "Échec de la récupération du solde utilisateur auprès du fournisseur.",
+                "Failed to fetch user balance from the provider.",
                 response,
                 500
             );
@@ -224,60 +179,17 @@ exports.getuserbalance = async (req, res) => {
 
         res.status(200).json({ success: true, data: response.response });
     } catch (error) {
-        handleError(res, "Erreur lors de la récupération du solde utilisateur.", error.message);
+        handleError(res, "Error fetching user balance.", error.message);
     }
 };
 
-
-
+// Transfer funds to user
 exports.giveMoneytoUser = async (req, res) => {
     try {
-        const { username, password } = req.body;
+        const { username, password, amount } = req.body;
 
-        // Validation des données entrantes
-        if (!username || !password) {
-            return handleError(res, "Username et password sont requis.", null, 400);
-        }
-
-        const payload = {
-            api_password: API_PASSWORD,
-            api_login: API_USERNAME,
-            method: "getPlayerBalance",
-            user_username: username,
-            user_password: password,
-            currency: "EUR",
-        };
-
-        const response = await callProviderAPI(payload);
-
-        if (response.error !== 0) {
-            return handleError(
-                res,
-                "Échec de la récupération du solde utilisateur auprès du fournisseur.",
-                response,
-                500
-            );
-        }
-
-        res.status(200).json({ success: true, data: response.response });
-    } catch (error) {
-        handleError(res, "Erreur lors de la récupération du solde utilisateur.", error.message);
-    }
-};
-
-exports.giveMoneytoUser = async (req, res) => {
-    try {
-        const { username, password, amount, transactionid } = req.body;
-
-        // Validation des données entrantes
-        if (!username || !password) {
-            return handleError(res, "Username et password sont requis.", null, 400);
-        }
-        if (amount == null || isNaN(amount)) {
-            return handleError(res, "Un montant valide est requis.", null, 400);
-        }
-        if (!transactionid) {
-            return handleError(res, "Transaction ID est requis.", null, 400);
+        if (!username || !password || amount == null || isNaN(amount)) {
+            return handleError(res, "Invalid input. Ensure all fields are provided.", null, 400);
         }
 
         const payload = {
@@ -287,7 +199,7 @@ exports.giveMoneytoUser = async (req, res) => {
             user_username: username,
             user_password: password,
             amount,
-            transactionid,
+            transactionid: generateTransactionId(),
             currency: "EUR",
         };
 
@@ -296,60 +208,16 @@ exports.giveMoneytoUser = async (req, res) => {
         if (response.error !== 0) {
             return res.status(500).json({
                 success: false,
-                message: "Échec de la transmission de fonds à l'utilisateur auprès du fournisseur.",
+                message: "Failed to transfer funds to the user via the provider.",
                 details: {
                     error: response.error,
                     providerMessage: response.message,
                 },
             });
         }
-        
 
         res.status(200).json({ success: true, data: response.response });
     } catch (error) {
-        handleError(res, "Erreur lors de la transmission de fonds.", error.message);
-    }
-};
-
-
-exports.createPlayer = async (req, res) => {
-    try {
-        const { user_username, user_password, currency = "EUR" } = req.body;
-
-        // Validation des données entrantes
-        if (!user_username || !user_password) {
-            return handleError(res, "Username et password sont requis.", null, 400);
-        }
-
-        const payload = {
-            api_password: API_PASSWORD, 
-            api_login: API_USERNAME,
-            method: "createPlayer",
-            user_username,
-            user_password,
-            currency,
-        };
-
-        console.log("[DEBUG] createPlayer Payload:", payload);
-
-        const response = await callProviderAPI(payload);
-
-        if (response.error !== 0) {
-            return handleError(
-                res,
-                "Échec de la création de l'utilisateur auprès du fournisseur.",
-                response,
-                500
-            );
-        }
-
-        res.status(200).json({
-            success: true,
-            message: "Utilisateur créé avec succès.",
-            data: response.response,
-        });
-    } catch (error) {
-        console.error("[ERROR] createPlayer Exception:", error);
-        handleError(res, "Erreur lors de la création de l'utilisateur.", error.message);
+        handleError(res, "Error transferring funds.", error.message);
     }
 };
