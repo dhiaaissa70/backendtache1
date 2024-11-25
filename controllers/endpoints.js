@@ -136,12 +136,14 @@ exports.getGame = async (req, res) => {
 
         console.log("Get Game Response:", gameResponse);
 
-        const gameUrl = gameResponse.response?.gameUrl;
-        const gamesessionId = gameResponse.response?.gamesessionId;
+        // Check for required fields in the response
+        const gameUrl = gameResponse.response; // Update this to match the actual game URL field
+        const gamesessionId = gameResponse.gamesession_id || gameResponse.response?.gamesession_id;
+
         if (!gameUrl || !gamesessionId) {
             return handleError(
                 res,
-                "Provider did not return a valid game session or URL.",
+                "Game URL or session ID missing in provider response.",
                 gameResponse,
                 500
             );
@@ -169,3 +171,4 @@ exports.getGame = async (req, res) => {
         handleError(res, "Error fetching game URL.", error.message);
     }
 };
+
