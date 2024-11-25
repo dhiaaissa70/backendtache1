@@ -69,12 +69,10 @@ exports.getlist = async (req, res) => {
 };
 
 // Route to retrieve game session and synchronize wallet
-// Route to retrieve game session and synchronize wallet
 exports.getGame = async (req, res) => {
     try {
         const { gameid, lang = "en", play_for_fun = false, homeurl, username } = req.body;
 
-        // Validate input
         if (!gameid || typeof gameid !== "number") {
             return handleError(res, "Invalid or missing gameid.", null, 400);
         }
@@ -82,7 +80,6 @@ exports.getGame = async (req, res) => {
             return handleError(res, "Username is required.", null, 400);
         }
 
-        // Fetch user
         const user = await User.findOne({ username });
         if (!user) {
             return handleError(res, "User not found.", null, 404);
@@ -90,7 +87,39 @@ exports.getGame = async (req, res) => {
 
         console.log(`User balance before API call: ${user.balance}`);
 
-        // Step 1: Fetch current provider balance
+        // Step 1: Ensure the player exists
+        const playerExistsPayload = {
+            api_password: API_PASSWORD,
+            api_login: API_USERNAME,
+            method: "playerExists",
+            user_username: username,
+            currency: "EUR",
+        };
+
+        const playerExistsResponse = await callProviderAPI(playerExistsPayload);
+
+        if (!playerExistsResponse.response) {
+            // Player doesn't exist, create them
+            console.log(`Player does not exist. Creating player: ${username}`);
+
+            const createPlayerPayload = {
+                api_password: API_PASSWORD,
+                api_login: API_USERNAME,
+                method: "createPlayer",
+                user_username: username,
+                user_password: username,
+                currency: "EUR",
+            };
+
+            const createPlayerResponse = await callProviderAPI(createPlayerPayload);
+            if (createPlayerResponse.error !== 0) {
+                throw new Error(`Failed to create player: ${createPlayerResponse.message}`);
+            }
+
+            console.log(`Player created successfully: ${createPlayerResponse.response.username}`);
+        }
+
+        // Step 2: Fetch current provider balance
         const balancePayload = {
             api_password: API_PASSWORD,
             api_login: API_USERNAME,
@@ -99,23 +128,22 @@ exports.getGame = async (req, res) => {
             user_password: username,
             currency: "EUR",
         };
-        const balanceResponse = await callProviderAPI(balancePayload);
 
+        const balanceResponse = await callProviderAPI(balancePayload);
         const providerBalance = parseFloat(balanceResponse.response || "0.00");
-        if (!isNaN(providerBalance)) {
-            console.log(`Updating user balance to provider's balance: ${providerBalance}`);
+
+        // Update local balance if valid
+        if (!isNaN(providerBalance) && providerBalance > 0) {
             user.balance = providerBalance;
             await user.save();
-        } else {
-            console.log("Failed to fetch valid provider balance. Using local balance.");
         }
 
-        // Ensure sufficient balance for real-money play
+        // Check balance for real-money play
         if (!play_for_fun && user.balance <= 0) {
             return handleError(res, "Insufficient balance.", null, 400);
         }
 
-        // Step 2: Login Player
+        // Step 3: Login Player
         const loginPlayerPayload = {
             api_password: API_PASSWORD,
             api_login: API_USERNAME,
@@ -124,16 +152,15 @@ exports.getGame = async (req, res) => {
             user_password: username,
             currency: "EUR",
         };
-        const loginPlayerResponse = await callProviderAPI(loginPlayerPayload);
 
+        const loginPlayerResponse = await callProviderAPI(loginPlayerPayload);
         const sessionId = loginPlayerResponse.response?.sessionid;
+
         if (!sessionId) {
             return handleError(res, "Provider login failed. Missing session ID.");
         }
 
-        console.log(`Session ID: ${sessionId}`);
-
-        // Step 3: Get Game Session
+        // Step 4: Get Game Session
         const gamePayload = {
             api_password: API_PASSWORD,
             api_login: API_USERNAME,
@@ -147,8 +174,8 @@ exports.getGame = async (req, res) => {
             homeurl: homeurl || "https://catch-me.bet",
             currency: "EUR",
         };
-        const gameResponse = await callProviderAPI(gamePayload);
 
+        const gameResponse = await callProviderAPI(gamePayload);
         const gameUrl = gameResponse.response;
         const gamesessionId = gameResponse.gamesession_id;
 
@@ -160,9 +187,6 @@ exports.getGame = async (req, res) => {
             );
         }
 
-        console.log(`Game session started. Session ID: ${sessionId}`);
-
-        // Return game URL and balance
         res.status(200).json({
             success: true,
             data: {
