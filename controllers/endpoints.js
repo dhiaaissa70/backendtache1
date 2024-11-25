@@ -232,23 +232,14 @@ exports.getuserbalance = async (req, res) => {
         handleError(res, "Erreur lors de la récupération du solde utilisateur.", error.message);
     }
 };
-
 exports.giveMoneytoUser = async (req, res) => {
     try {
         const { username, password, amount, transactionid } = req.body;
 
-        // Validation des données entrantes
-        if (!username || !password) {
-            return handleError(res, "Username et password sont requis.", null, 400);
-        }
-        if (amount == null || isNaN(amount)) {
-            return handleError(res, "Un montant valide est requis.", null, 400);
-        }
-        if (!transactionid) {
-            return handleError(res, "Transaction ID est requis.", null, 400);
+        if (!username || !password || !amount || !transactionid) {
+            return handleError(res, "Tous les champs (username, password, amount, transactionid) sont requis.", null, 400);
         }
 
-        // Créer les paramètres de la requête sans la clé
         const requestData = {
             api_password: API_PASSWORD,
             api_login: API_USERNAME,
@@ -263,11 +254,11 @@ exports.giveMoneytoUser = async (req, res) => {
         // Générer le hachage
         const key = generateKey(SALT_KEY, requestData);
 
-        // Ajouter la clé au payload final
-        const payload = { ...requestData, key };
+        // Ajouter le key
+        requestData.key = key;
 
-        // Appeler le fournisseur avec le payload
-        const response = await callProviderAPI(payload);
+        // Appeler l'API
+        const response = await callProviderAPI(requestData);
 
         if (response.error !== 0) {
             return res.status(500).json({
@@ -280,9 +271,9 @@ exports.giveMoneytoUser = async (req, res) => {
             });
         }
 
-        res.status(200).json({ success: true, data: response.response });
+        return res.status(200).json({ success: true, data: response.response });
     } catch (error) {
-        handleError(res, "Erreur lors de la transmission de fonds.", error.message);
+        handleError(res, "Erreur interne lors de la transmission de fonds.", error.message);
     }
 };
 
