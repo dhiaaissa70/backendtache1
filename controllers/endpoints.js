@@ -151,3 +151,39 @@ exports.getGame = async (req, res) => {
 };
 
 
+exports.getuserbalance = async (req, res) => {
+    try {
+        const { username, password } = req.body;
+
+        // Validation des données entrantes
+        if (!username || !password) {
+            return handleError(res, "Username et password sont requis.", null, 400);
+        }
+
+        const payload = {
+            api_password: API_PASSWORD,
+            api_login: API_USERNAME,
+            method: "getPlayerBalance",
+            user_username: username,
+            user_password: password,
+            currency: "EUR",
+        };
+
+        const response = await callProviderAPI(payload);
+
+        if (response.error !== 0) {
+            return handleError(
+                res,
+                "Échec de la récupération du solde utilisateur auprès du fournisseur.",
+                response,
+                500
+            );
+        }
+
+        res.status(200).json({ success: true, data: response.response });
+    } catch (error) {
+        handleError(res, "Erreur lors de la récupération du solde utilisateur.", error.message);
+    }
+};
+
+
