@@ -2,7 +2,7 @@ const axios = require("axios");
 const crypto = require("crypto");
 const User = require("../models/User");
 const GameSession = require("../models/gamesession");
-const { generateTransactionId, generateKey } = require("../utils"); // Import utilities
+const { generateTransactionId, generateKey } = require("../utils/utils"); // Import utilities
 
 // Load environment variables
 const API_PASSWORD = process.env.API_PASSWORD;
