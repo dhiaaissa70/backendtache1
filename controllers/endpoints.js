@@ -83,7 +83,6 @@ exports.getGame = async (req, res) => {
             return handleError(res, "User not found.", null, 404);
         }
 
-        // Log current balance
         console.log(`User balance before API call: ${user.balance}`);
 
         // Ensure sufficient balance for real-money play
@@ -102,24 +101,23 @@ exports.getGame = async (req, res) => {
         };
         const loginPlayerResponse = await callProviderAPI(loginPlayerPayload);
 
-        // Extract session ID
         const sessionId = loginPlayerResponse.response?.sessionid;
+        const providerBalance = loginPlayerResponse.response?.balance;
+
         if (!sessionId) {
             return handleError(res, "Provider login failed. Missing session ID.");
         }
 
-        // Log session ID and balance from provider
         console.log(`Session ID: ${sessionId}`);
-        console.log(`Provider balance from login response: ${loginPlayerResponse.response?.balance}`);
+        console.log(`Provider balance from login response: ${providerBalance}`);
 
-        // Optional: Sync balance only if the provider returns a valid balance
-        const providerBalance = loginPlayerResponse.response?.balance;
-        if (providerBalance !== undefined && providerBalance !== null) {
+        // Update balance only if valid
+        if (providerBalance !== undefined && providerBalance > 0) {
             console.log(`Updating user balance to provider's balance: ${providerBalance}`);
             user.balance = providerBalance;
-            await user.save(); // Save the updated balance to the database
+            await user.save();
         } else {
-            console.log("Provider did not return a valid balance. Keeping the current balance.");
+            console.log(`Provider balance is invalid (${providerBalance}). Retaining existing user balance.`);
         }
 
         // Step 2: Get Game Session
@@ -138,12 +136,8 @@ exports.getGame = async (req, res) => {
         };
         const gameResponse = await callProviderAPI(gamePayload);
 
-        // Extract game URL and session ID
         const gameUrl = gameResponse.response;
         const gamesessionId = gameResponse.gamesession_id;
-
-        // Log game response
-        console.log("Game Response:", gameResponse);
 
         if (!gameUrl || !gamesessionId) {
             return handleError(
@@ -153,16 +147,15 @@ exports.getGame = async (req, res) => {
             );
         }
 
-        // Step 3: Log final user balance
         console.log(`Final user balance before returning response: ${user.balance}`);
 
-        // Step 4: Return game URL and balance
+        // Return game URL and balance
         res.status(200).json({
             success: true,
             data: {
                 gameUrl: `${gameUrl}&sessionid=${sessionId}`,
                 gamesessionId,
-                userBalance: user.balance, // Include updated balance
+                userBalance: user.balance,
             },
         });
     } catch (error) {
@@ -170,5 +163,6 @@ exports.getGame = async (req, res) => {
         handleError(res, "Error fetching game URL.", error.message);
     }
 };
+
 
 
