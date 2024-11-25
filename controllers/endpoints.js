@@ -27,6 +27,8 @@ async function callProviderAPI(payload) {
         );
     }
 }
+
+
 // Error handler function
 function handleError(res, message, details = null, statusCode = 500) {
     console.error("Error:", { message, details });
@@ -99,10 +101,14 @@ exports.getGame = async (req, res) => {
             api_login: API_USERNAME,
             method: "loginPlayer",
             user_username: username,
-            user_password: username, // Use secure handling for production
+            user_password: username,
             currency: "EUR",
         };
+        console.log("[DEBUG] loginPlayerPayload:", loginPlayerPayload);
+
         const loginPlayerResponse = await callProviderAPI(loginPlayerPayload);
+
+        console.log("[DEBUG] loginPlayerResponse:", loginPlayerResponse);
 
         const sessionId = loginPlayerResponse.response?.sessionid;
         const providerBalance = loginPlayerResponse.response?.balance;
@@ -111,8 +117,8 @@ exports.getGame = async (req, res) => {
             return handleError(res, "Provider login failed. Missing session ID.");
         }
 
-        console.log(`Session ID: ${sessionId}`);
-        console.log(`Provider balance from login response: ${providerBalance}`);
+        console.log(`[DEBUG] Session ID: ${sessionId}`);
+        console.log(`[DEBUG] Provider balance from login response: ${providerBalance}`);
 
         // Step 2: Get Game Session
         const gamePayload = {
@@ -128,7 +134,11 @@ exports.getGame = async (req, res) => {
             homeurl: homeurl || "https://catch-me.bet",
             currency: "EUR",
         };
+        console.log("[DEBUG] gamePayload:", gamePayload);
+
         const gameResponse = await callProviderAPI(gamePayload);
+
+        console.log("[DEBUG] gameResponse:", gameResponse);
 
         const gameUrl = gameResponse.response;
         const gamesessionId = gameResponse.gamesession_id;
@@ -141,10 +151,24 @@ exports.getGame = async (req, res) => {
             );
         }
 
-        console.log(`Final user balance before returning response: ${user.balance}`);
+        // Debug: Verify the URL returned from the provider
+        console.log(`[DEBUG] gameUrl from provider: ${gameUrl}`);
+        console.log(`[DEBUG] gamesessionId from provider: ${gamesessionId}`);
 
-        // Step 3: Append session ID or additional data to the URL
+        // Step 3: Validate the URL for key mismatch issues
+        if (!gameUrl.includes("key=") || !gameUrl.includes("sessionid=")) {
+            console.error("[ERROR] gameUrl missing required parameters:", gameUrl);
+            return handleError(
+                res,
+                "Game URL is missing required parameters. Please check the provider response.",
+                gameResponse,
+                400
+            );
+        }
+
+        // Append additional parameters to the URL if necessary
         const finalGameUrl = `${gameUrl}&sessionid=${sessionId}`;
+        console.log(`[DEBUG] Final gameUrl: ${finalGameUrl}`);
 
         // Return game URL and balance
         res.status(200).json({
@@ -156,7 +180,7 @@ exports.getGame = async (req, res) => {
             },
         });
     } catch (error) {
-        console.error("Error in getGame:", error);
+        console.error("[ERROR] getGame Exception:", error);
         handleError(res, "Error fetching game URL.", error.message);
     }
 };
