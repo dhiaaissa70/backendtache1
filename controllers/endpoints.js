@@ -353,3 +353,51 @@ exports.createPlayer = async (req, res) => {
         handleError(res, "Erreur lors de la création de l'utilisateur.", error.message);
     }
 };
+
+
+exports.loginPlayer = async (req, res) => {
+    try {
+        const { username, password, currency = "EUR" } = req.body;
+
+        // Validate input
+        if (!username || !password) {
+            return handleError(res, "Username et password sont requis.", null, 400);
+        }
+
+        // Prepare payload for the provider API
+        const payload = {
+            api_password: API_PASSWORD,
+            api_login: API_USERNAME,
+            method: "loginPlayer",
+            user_username: username,
+            user_password: password,
+            currency,
+        };
+
+        console.log("[DEBUG] loginPlayer Payload:", payload);
+
+        // Call the provider API
+        const response = await callProviderAPI(payload);
+
+        console.log("[DEBUG] loginPlayer Response:", response);
+
+        // Check for errors in the API response
+        if (response.error !== 0) {
+            return handleError(
+                res,
+                "Échec de la connexion utilisateur auprès du fournisseur.",
+                response,
+                500
+            );
+        }
+
+        // Return success response with session ID and user details
+        res.status(200).json({
+            success: true,
+            data: response.response, // Assumes response contains session ID or other relevant info
+        });
+    } catch (error) {
+        console.error("[ERROR] loginPlayer Exception:", error);
+        handleError(res, "Erreur lors de la connexion utilisateur.", error.message);
+    }
+}

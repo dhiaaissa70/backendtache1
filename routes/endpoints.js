@@ -14,5 +14,6 @@ router.post("/givemoney", endpointController.giveMoneytoUser);
 
 router.post("/createplayer", endpointController.createPlayer);
 
+router.post("/loginPlayer", endpointController.loginPlayer);
 
 module.exports = router;
