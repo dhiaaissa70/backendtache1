@@ -27,7 +27,6 @@ async function callProviderAPI(payload) {
         );
     }
 }
-
 // Error handler function
 function handleError(res, message, details = null, statusCode = 500) {
     console.error("Error:", { message, details });
@@ -89,23 +88,31 @@ exports.getGame = async (req, res) => {
 
         console.log(`User balance before API call: ${user.balance}`);
 
+        // Ensure sufficient balance for real-money play
+        if (!play_for_fun && user.balance <= 0) {
+            return handleError(res, "Insufficient balance.", null, 400);
+        }
+
         // Step 1: Login Player
         const loginPlayerPayload = {
             api_password: API_PASSWORD,
             api_login: API_USERNAME,
             method: "loginPlayer",
             user_username: username,
-            user_password: username,
+            user_password: username, // Use secure handling for production
             currency: "EUR",
         };
         const loginPlayerResponse = await callProviderAPI(loginPlayerPayload);
 
         const sessionId = loginPlayerResponse.response?.sessionid;
+        const providerBalance = loginPlayerResponse.response?.balance;
+
         if (!sessionId) {
             return handleError(res, "Provider login failed. Missing session ID.");
         }
 
         console.log(`Session ID: ${sessionId}`);
+        console.log(`Provider balance from login response: ${providerBalance}`);
 
         // Step 2: Get Game Session
         const gamePayload = {
@@ -134,12 +141,16 @@ exports.getGame = async (req, res) => {
             );
         }
 
-        // Step 3: Return game session and internal balance
         console.log(`Final user balance before returning response: ${user.balance}`);
+
+        // Step 3: Append session ID or additional data to the URL
+        const finalGameUrl = `${gameUrl}&sessionid=${sessionId}`;
+
+        // Return game URL and balance
         res.status(200).json({
             success: true,
             data: {
-                gameUrl: `${gameUrl}&sessionid=${sessionId}`,
+                gameUrl: finalGameUrl,
                 gamesessionId,
                 userBalance: user.balance,
             },
@@ -149,5 +160,3 @@ exports.getGame = async (req, res) => {
         handleError(res, "Error fetching game URL.", error.message);
     }
 };
-
-
