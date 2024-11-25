@@ -10,34 +10,37 @@ const API_USERNAME = process.env.API_USERNAME;
 async function callProviderAPI(payload) {
     const url = "https://stage.game-program.com/api/seamless/provider";
     try {
-        console.log("Calling Provider API:", { method: payload.method });
+        console.log("Calling Provider API:", payload.method);
         const response = await axios.post(url, payload, {
             headers: { "Content-Type": "application/json" },
         });
-        console.log("Provider API Success:", { method: payload.method, response: response.data });
+        console.log("Provider API Response:", response.data);
         return response.data;
     } catch (error) {
-        console.error("Provider API Error:", { method: payload.method, error: error.response?.data || error.message });
-        throw new Error(`Provider API Error for method ${payload.method}: ${error.response?.data?.message || error.message}`);
+        console.error("Provider API Error:", error.response?.data || error.message);
+        throw new Error(
+            `Provider API Error (${payload.method}): ${error.response?.data?.message || error.message}`
+        );
     }
 }
 
 // Error handler
 function handleError(res, message, details = null, statusCode = 500) {
-    console.error("Error:", { message, details });
+    console.error("Error:", message, details);
     res.status(statusCode).json({ success: false, message, details });
 }
 
 // Get Game List Handler
 exports.getlist = async (req, res) => {
     try {
+        const currency = req.body.currency || "EUR"; // Default to EUR if not provided
         const payload = {
             api_password: API_PASSWORD,
             api_login: API_USERNAME,
             method: "getGameList",
             show_systems: 0,
             show_additional: false,
-            currency: "EUR",
+            currency,
         };
 
         const response = await callProviderAPI(payload);
@@ -84,7 +87,7 @@ exports.getGame = async (req, res) => {
             api_login: API_USERNAME,
             method: "loginPlayer",
             user_username: username,
-            user_password: username,
+            user_password: username, // Use hashed password if needed
             currency: "EUR",
         };
         const loginPlayerResponse = await callProviderAPI(loginPlayerPayload);
@@ -99,7 +102,7 @@ exports.getGame = async (req, res) => {
             api_password: API_PASSWORD,
             api_login: API_USERNAME,
             method: "getGame",
-            gameid,
+            gameid: Number(gameid), // Ensure gameid is a number
             lang,
             play_for_fun,
             user_username: username,
