@@ -28,6 +28,7 @@ async function callProviderAPI(payload) {
     }
 }
 
+
 // Error handler function
 function handleError(res, message, details = null, statusCode = 500) {
     console.error("Error:", { message, details });
@@ -89,6 +90,11 @@ exports.getGame = async (req, res) => {
 
         console.log(`User balance before API call: ${user.balance}`);
 
+        // Ensure sufficient balance for real-money play
+        if (!play_for_fun && user.balance <= 0) {
+            return handleError(res, "Insufficient balance.", null, 400);
+        }
+
         // Step 1: Login Player
         const loginPlayerPayload = {
             api_password: API_PASSWORD,
@@ -98,14 +104,19 @@ exports.getGame = async (req, res) => {
             user_password: username,
             currency: "EUR",
         };
+        console.log("[DEBUG] loginPlayerPayload:", loginPlayerPayload);
+
         const loginPlayerResponse = await callProviderAPI(loginPlayerPayload);
 
+        console.log("[DEBUG] loginPlayerResponse:", loginPlayerResponse);
+
         const sessionId = loginPlayerResponse.response?.sessionid;
+
         if (!sessionId) {
             return handleError(res, "Provider login failed. Missing session ID.");
         }
 
-        console.log(`Session ID: ${sessionId}`);
+        console.log(`[DEBUG] Session ID: ${sessionId}`);
 
         // Step 2: Get Game Session
         const gamePayload = {
@@ -121,7 +132,11 @@ exports.getGame = async (req, res) => {
             homeurl: homeurl || "https://catch-me.bet",
             currency: "EUR",
         };
+        console.log("[DEBUG] gamePayload:", gamePayload);
+
         const gameResponse = await callProviderAPI(gamePayload);
+
+        console.log("[DEBUG] gameResponse:", gameResponse);
 
         const gameUrl = gameResponse.response;
         const gamesessionId = gameResponse.gamesession_id;
@@ -134,18 +149,45 @@ exports.getGame = async (req, res) => {
             );
         }
 
-        // Step 3: Return game session and internal balance
-        console.log(`Final user balance before returning response: ${user.balance}`);
+        console.log(`[DEBUG] gameUrl from provider: ${gameUrl}`);
+        console.log(`[DEBUG] gamesessionId from provider: ${gamesessionId}`);
+
+        // Step 3: Validate and Decode gameUrl
+        const decodedGameUrl = decodeURIComponent(gameUrl);
+        console.log(`[DEBUG] Decoded gameUrl: ${decodedGameUrl}`);
+
+        if (!decodedGameUrl.includes("key=") || !decodedGameUrl.includes("sessionid=")) {
+            console.error("[ERROR] gameUrl missing required parameters:", decodedGameUrl);
+            return handleError(
+                res,
+                "Game URL is missing required parameters. Please check the provider response.",
+                gameResponse,
+                400
+            );
+        }
+
+        // Optional: Extract and log key query parameters from the URL for debugging
+        const urlParams = new URLSearchParams(decodedGameUrl.split("?")[1]);
+        console.log("[DEBUG] Extracted URL Parameters:");
+        for (const [key, value] of urlParams.entries()) {
+            console.log(`  ${key}: ${value}`);
+        }
+
+        // Append additional parameters if required
+        const finalGameUrl = `${gameUrl}&sessionid=${sessionId}`;
+        console.log(`[DEBUG] Final gameUrl: ${finalGameUrl}`);
+
+        // Return game URL and balance
         res.status(200).json({
             success: true,
             data: {
-                gameUrl: `${gameUrl}&sessionid=${sessionId}`,
+                gameUrl: finalGameUrl,
                 gamesessionId,
                 userBalance: user.balance,
             },
         });
     } catch (error) {
-        console.error("Error in getGame:", error);
+        console.error("[ERROR] getGame Exception:", error);
         handleError(res, "Error fetching game URL.", error.message);
     }
 };
@@ -185,5 +227,6 @@ exports.getuserbalance = async (req, res) => {
         handleError(res, "Erreur lors de la récupération du solde utilisateur.", error.message);
     }
 };
+
 
 
