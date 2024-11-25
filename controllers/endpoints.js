@@ -83,11 +83,31 @@ exports.getGame = async (req, res) => {
         return handleError(res, "User not found.", null, 404);
       }
   
-      if (!play_for_fun && user.balance <= 0) {
-        return handleError(res, "Insufficient balance.", null, 400);
+      // Step 2: Sync user with the provider
+      const playerExistsPayload = {
+        api_password: API_PASSWORD,
+        api_login: API_USERNAME,
+        method: "playerExists",
+        user_username: username,
+        currency: "EUR",
+      };
+      const playerExistsResponse = await callProviderAPI(playerExistsPayload);
+  
+      if (!playerExistsResponse.response) {
+        // Create the user if they do not exist in the provider's system
+        const createPlayerPayload = {
+          api_password: API_PASSWORD,
+          api_login: API_USERNAME,
+          method: "createPlayer",
+          user_username: username,
+          user_password: username,
+          currency: "EUR",
+          balance: user.balance,
+        };
+        await callProviderAPI(createPlayerPayload);
       }
   
-      // Step 2: Log in the player
+      // Step 3: Log in the player
       const loginPlayerPayload = {
         api_password: API_PASSWORD,
         api_login: API_USERNAME,
@@ -103,7 +123,7 @@ exports.getGame = async (req, res) => {
         return handleError(res, "Provider login failed. Missing session ID.");
       }
   
-      // Step 3: Fetch game session
+      // Step 4: Fetch game session
       const gamePayload = {
         api_password: API_PASSWORD,
         api_login: API_USERNAME,
@@ -116,10 +136,13 @@ exports.getGame = async (req, res) => {
         sessionid: sessionId,
         homeurl: homeurl || "https://catch-me.bet",
         currency: "EUR",
+        balance: user.balance,
       };
       const gameResponse = await callProviderAPI(gamePayload);
   
-      if (!gameResponse.response || !gameResponse.gamesession_id) {
+      const gameUrl = gameResponse.response;
+      const gamesessionId = gameResponse.gamesession_id;
+      if (!gameUrl || !gamesessionId) {
         return handleError(
           res,
           "Provider did not return a valid game session or URL.",
@@ -127,13 +150,19 @@ exports.getGame = async (req, res) => {
         );
       }
   
-      // Step 4: Return game URL with session info
+      // Step 5: Update user balance from the provider if needed
+      if (loginPlayerResponse.response?.balance !== undefined) {
+        user.balance = loginPlayerResponse.response.balance;
+        await user.save();
+      }
+  
+      // Step 6: Return game URL with session info
       res.status(200).json({
         success: true,
         data: {
-          gameUrl: `${gameResponse.response}&sessionid=${sessionId}`,
-          gamesessionId: gameResponse.gamesession_id,
-          userBalance: user.balance, // Return your backend balance
+          gameUrl: `${gameUrl}&sessionid=${sessionId}`,
+          gamesessionId,
+          userBalance: user.balance,
         },
       });
     } catch (error) {
