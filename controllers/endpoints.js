@@ -87,29 +87,30 @@ exports.getGame = async (req, res) => {
 
         console.log(`User balance before API call: ${user.balance}`);
 
-        // Step 1: Sync balance to provider if necessary
-        if (!play_for_fun) {
-            const syncBalancePayload = {
-                api_password: API_PASSWORD,
-                api_login: API_USERNAME,
-                method: "giveMoney",
-                user_username: username,
-                user_password: username,
-                amount: user.balance.toFixed(2),
-                transactionid: `txn_${Date.now()}_${user._id}`,
-                currency: "EUR",
-            };
+        // Step 1: Get Balance from Provider
+        const balancePayload = {
+            api_password: API_PASSWORD,
+            api_login: API_USERNAME,
+            method: "getPlayerBalance",
+            user_username: username,
+            user_password: username,
+            currency: "EUR",
+        };
+        const balanceResponse = await callProviderAPI(balancePayload);
+        const providerBalance = parseFloat(balanceResponse.response || "0.00");
 
-            const syncBalanceResponse = await callProviderAPI(syncBalancePayload);
-
-            if (syncBalanceResponse.error !== 0) {
-                return handleError(res, "Failed to sync balance to provider.", syncBalanceResponse, 500);
-            }
-
-            console.log("Balance synchronized successfully.");
+        if (isNaN(providerBalance)) {
+            console.error("Invalid balance from provider:", balanceResponse);
+            return handleError(res, "Failed to retrieve balance from provider.");
         }
 
-        // Step 2: Login Player
+        console.log(`Provider balance from getPlayerBalance: ${providerBalance}`);
+
+        // Step 2: Update Local Balance
+        user.balance = providerBalance;
+        await user.save();
+
+        // Step 3: Login Player
         const loginPlayerPayload = {
             api_password: API_PASSWORD,
             api_login: API_USERNAME,
@@ -119,15 +120,15 @@ exports.getGame = async (req, res) => {
             currency: "EUR",
         };
         const loginPlayerResponse = await callProviderAPI(loginPlayerPayload);
-        const sessionId = loginPlayerResponse.response?.sessionid;
 
+        const sessionId = loginPlayerResponse.response?.sessionid;
         if (!sessionId) {
             return handleError(res, "Provider login failed. Missing session ID.");
         }
 
         console.log(`Session ID: ${sessionId}`);
 
-        // Step 3: Get Game Session
+        // Step 4: Get Game Session
         const gamePayload = {
             api_password: API_PASSWORD,
             api_login: API_USERNAME,
@@ -150,25 +151,7 @@ exports.getGame = async (req, res) => {
             return handleError(res, "Provider did not return a valid game session or URL.", gameResponse);
         }
 
-        // Step 4: Fetch final balance from provider
-        const fetchBalancePayload = {
-            api_password: API_PASSWORD,
-            api_login: API_USERNAME,
-            method: "getPlayerBalance",
-            user_username: username,
-            user_password: username,
-            currency: "EUR",
-        };
-
-        const fetchBalanceResponse = await callProviderAPI(fetchBalancePayload);
-        const finalProviderBalance = parseFloat(fetchBalanceResponse.response || "0.00");
-
-        if (!isNaN(finalProviderBalance)) {
-            console.log(`Updating user balance to provider's final balance: ${finalProviderBalance}`);
-            user.balance = finalProviderBalance;
-            await user.save();
-        }
-
+        // Return the Game URL and Balance
         res.status(200).json({
             success: true,
             data: {
