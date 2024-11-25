@@ -66,6 +66,7 @@ exports.getlist = async (req, res) => {
 };
 
 // Get Game Handler
+// Get Game Handler
 exports.getGame = async (req, res) => {
     try {
         const { gameid, lang = "en", play_for_fun = false, homeurl, username } = req.body;
@@ -77,16 +78,18 @@ exports.getGame = async (req, res) => {
             return handleError(res, "Username is required.", null, 400);
         }
 
+        // Step 1: Fetch user
         const user = await User.findOne({ username });
         if (!user) {
             return handleError(res, "User not found.", null, 404);
         }
 
+        // Step 2: Check user balance for real mode
         if (!play_for_fun && user.balance <= 0) {
             return handleError(res, "Insufficient balance.", null, 400);
         }
 
-        // Log in the player
+        // Step 3: Log in the player
         const loginPlayerPayload = {
             api_password: API_PASSWORD,
             api_login: API_USERNAME,
@@ -102,7 +105,7 @@ exports.getGame = async (req, res) => {
             return handleError(res, "Provider login failed. Missing session ID.");
         }
 
-        // Get the game session
+        // Step 4: Fetch game session
         const gamePayload = {
             api_password: API_PASSWORD,
             api_login: API_USERNAME,
@@ -121,10 +124,21 @@ exports.getGame = async (req, res) => {
         const gameUrl = gameResponse.response;
         const gamesessionId = gameResponse.gamesession_id;
         if (!gameUrl || !gamesessionId) {
-            return handleError(res, "Provider did not return a valid game session or URL.", gameResponse);
+            return handleError(
+                res,
+                "Provider did not return a valid game session or URL.",
+                gameResponse
+            );
         }
 
-        // Return game URL with session ID appended
+        // Step 5: Debugging Logs
+        console.log("Get Game Response:", {
+            sessionid: sessionId,
+            gamesession_id: gamesessionId,
+            gameUrl,
+        });
+
+        // Step 6: Return game URL with session info
         res.status(200).json({
             success: true,
             data: {
