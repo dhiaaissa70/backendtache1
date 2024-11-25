@@ -111,14 +111,12 @@ exports.getGame = async (req, res) => {
         console.log("[DEBUG] loginPlayerResponse:", loginPlayerResponse);
 
         const sessionId = loginPlayerResponse.response?.sessionid;
-        const providerBalance = loginPlayerResponse.response?.balance;
 
         if (!sessionId) {
             return handleError(res, "Provider login failed. Missing session ID.");
         }
 
         console.log(`[DEBUG] Session ID: ${sessionId}`);
-        console.log(`[DEBUG] Provider balance from login response: ${providerBalance}`);
 
         // Step 2: Get Game Session
         const gamePayload = {
@@ -151,13 +149,15 @@ exports.getGame = async (req, res) => {
             );
         }
 
-        // Debug: Verify the URL returned from the provider
         console.log(`[DEBUG] gameUrl from provider: ${gameUrl}`);
         console.log(`[DEBUG] gamesessionId from provider: ${gamesessionId}`);
 
-        // Step 3: Validate the URL for key mismatch issues
-        if (!gameUrl.includes("key=") || !gameUrl.includes("sessionid=")) {
-            console.error("[ERROR] gameUrl missing required parameters:", gameUrl);
+        // Step 3: Validate and Decode gameUrl
+        const decodedGameUrl = decodeURIComponent(gameUrl);
+        console.log(`[DEBUG] Decoded gameUrl: ${decodedGameUrl}`);
+
+        if (!decodedGameUrl.includes("key=") || !decodedGameUrl.includes("sessionid=")) {
+            console.error("[ERROR] gameUrl missing required parameters:", decodedGameUrl);
             return handleError(
                 res,
                 "Game URL is missing required parameters. Please check the provider response.",
@@ -166,7 +166,14 @@ exports.getGame = async (req, res) => {
             );
         }
 
-        // Append additional parameters to the URL if necessary
+        // Optional: Extract and log key query parameters from the URL for debugging
+        const urlParams = new URLSearchParams(decodedGameUrl.split("?")[1]);
+        console.log("[DEBUG] Extracted URL Parameters:");
+        for (const [key, value] of urlParams.entries()) {
+            console.log(`  ${key}: ${value}`);
+        }
+
+        // Append additional parameters if required
         const finalGameUrl = `${gameUrl}&sessionid=${sessionId}`;
         console.log(`[DEBUG] Final gameUrl: ${finalGameUrl}`);
 
@@ -184,3 +191,4 @@ exports.getGame = async (req, res) => {
         handleError(res, "Error fetching game URL.", error.message);
     }
 };
+
