@@ -66,93 +66,24 @@ exports.getlist = async (req, res) => {
 };
 
 // Get Game Handler
-exports.getGame = async (req, res) => {
+async function callProviderAPI(payload) {
+    const url = "https://stage.game-program.com/api/seamless/provider";
     try {
-        const { gameid, lang = "en", play_for_fun = false, homeurl, username } = req.body;
-
-        if (!gameid || typeof gameid !== "number") {
-            return handleError(res, "Invalid or missing gameid.", null, 400);
-        }
-        if (!username) {
-            return handleError(res, "Username is required.", null, 400);
-        }
-
-        // Step 1: Fetch user
-        const user = await User.findOne({ username });
-        if (!user) {
-            return handleError(res, "User not found.", null, 404);
-        }
-
-        console.log("User balance before API call:", user.balance);
-
-        // Step 2: Log in the player
-        const loginPlayerPayload = {
-            api_password: API_PASSWORD,
-            api_login: API_USERNAME,
-            method: "loginPlayer",
-            user_username: username,
-            user_password: username,
-            currency: "EUR",
-        };
-        const loginPlayerResponse = await callProviderAPI(loginPlayerPayload);
-
-        const sessionId = loginPlayerResponse.response?.sessionid;
-        if (!sessionId) {
-            return handleError(res, "Provider login failed. Missing session ID.");
-        }
-
-        // Log balance from provider's login response
-        const providerBalance = loginPlayerResponse.response?.balance;
-        console.log("Provider login response balance:", providerBalance);
-
-        // Step 3: Sync provider balance only if valid
-        if (providerBalance !== undefined && providerBalance !== null) {
-            console.log("Updating user balance to provider's balance:", providerBalance);
-            user.balance = providerBalance;
-            await user.save();
-        }
-
-        // Step 4: Fetch game session
-        const gamePayload = {
-            api_password: API_PASSWORD,
-            api_login: API_USERNAME,
-            method: "getGame",
-            gameid,
-            lang,
-            play_for_fun,
-            user_username: username,
-            user_password: username,
-            sessionid: sessionId,
-            homeurl: homeurl || "https://catch-me.bet",
-            currency: "EUR",
-            balance: user.balance, // Include user's balance in the game payload
-        };
-        const gameResponse = await callProviderAPI(gamePayload);
-
-        const gameUrl = gameResponse.response;
-        const gamesessionId = gameResponse.gamesession_id;
-        if (!gameUrl || !gamesessionId) {
-            return handleError(
-                res,
-                "Provider did not return a valid game session or URL.",
-                gameResponse
-            );
-        }
-
-        // Step 5: Log final user balance
-        console.log("Final user balance before returning response:", user.balance);
-
-        // Step 6: Return game URL and user balance
-        res.status(200).json({
-            success: true,
-            data: {
-                gameUrl: `${gameUrl}&sessionid=${sessionId}`,
-                gamesessionId,
-                userBalance: user.balance, // Return updated balance
-            },
+        console.log("Calling Provider API:", { method: payload.method, payload });
+        const response = await axios.post(url, payload, {
+            headers: { "Content-Type": "application/json" },
         });
+        console.log("Provider API Response:", response.data);
+        return response.data;
     } catch (error) {
-        handleError(res, "Error fetching game URL.", error.message);
+        console.error("Provider API Error:", {
+            method: payload.method,
+            payload,
+            error: error.response?.data || error.message,
+        });
+        throw new Error(
+            `Provider API Error for method ${payload.method}: ${error.response?.data?.message || error.message}`
+        );
     }
-};
+}
 
