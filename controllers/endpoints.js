@@ -70,7 +70,6 @@ exports.getGame = async (req, res) => {
     try {
         const { gameid, lang = "en", play_for_fun = false, homeurl, username } = req.body;
 
-        // Validate inputs
         if (!gameid || typeof gameid !== "number") {
             return handleError(res, "Invalid or missing gameid.", null, 400);
         }
@@ -78,13 +77,11 @@ exports.getGame = async (req, res) => {
             return handleError(res, "Username is required.", null, 400);
         }
 
-        // Find user in the database
         const user = await User.findOne({ username });
         if (!user) {
             return handleError(res, "User not found.", null, 404);
         }
 
-        // Check balance for real money games
         if (!play_for_fun && user.balance <= 0) {
             return handleError(res, "Insufficient balance.", null, 400);
         }
@@ -95,24 +92,14 @@ exports.getGame = async (req, res) => {
             api_login: API_USERNAME,
             method: "loginPlayer",
             user_username: username,
-            user_password: username, // If hashed, hash it before sending
+            user_password: username,
             currency: "EUR",
         };
-
-        console.log("Login Player Payload:", loginPlayerPayload);
-
         const loginPlayerResponse = await callProviderAPI(loginPlayerPayload);
-
-        console.log("Login Player Response:", loginPlayerResponse);
 
         const sessionId = loginPlayerResponse.response?.sessionid;
         if (!sessionId) {
-            return handleError(
-                res,
-                "Provider login failed. Missing session ID.",
-                loginPlayerResponse,
-                500
-            );
+            return handleError(res, "Provider login failed. Missing session ID.");
         }
 
         // Get the game session
@@ -120,50 +107,29 @@ exports.getGame = async (req, res) => {
             api_password: API_PASSWORD,
             api_login: API_USERNAME,
             method: "getGame",
-            gameid: Number(gameid),
+            gameid,
             lang,
             play_for_fun,
             user_username: username,
             user_password: username,
-            sessionid: sessionId, // Include session ID from loginPlayer
+            sessionid: sessionId,
             homeurl: homeurl || "https://catch-me.bet",
             currency: "EUR",
         };
-
-        console.log("Get Game Payload:", gamePayload);
-
         const gameResponse = await callProviderAPI(gamePayload);
 
-        console.log("Get Game Response:", gameResponse);
-
-        // Check for required fields in the response
-        const gameUrl = gameResponse.response; // Update this to match the actual game URL field
-        const gamesessionId = gameResponse.gamesession_id || gameResponse.response?.gamesession_id;
-
+        const gameUrl = gameResponse.response;
+        const gamesessionId = gameResponse.gamesession_id;
         if (!gameUrl || !gamesessionId) {
-            return handleError(
-                res,
-                "Game URL or session ID missing in provider response.",
-                gameResponse,
-                500
-            );
+            return handleError(res, "Provider did not return a valid game session or URL.", gameResponse);
         }
 
-        // Create a new game session record
-        const gameSession = await GameSession.create({
-            userId: user._id,
-            gameId: gameid,
-            gamesession_id: gamesessionId,
-            sessionid: sessionId,
-            balanceBefore: user.balance,
-        });
-
-        // Return success response
+        // Return game URL with session ID appended
         res.status(200).json({
             success: true,
             data: {
-                gameUrl,
-                gamesessionId: gameSession._id,
+                gameUrl: `${gameUrl}&sessionid=${sessionId}`,
+                gamesessionId,
                 userBalance: user.balance,
             },
         });
