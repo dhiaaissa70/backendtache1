@@ -10,37 +10,42 @@ const API_USERNAME = process.env.API_USERNAME;
 async function callProviderAPI(payload) {
     const url = "https://stage.game-program.com/api/seamless/provider";
     try {
-        console.log("Calling Provider API:", payload.method);
+        console.log("Calling Provider API:", { method: payload.method });
         const response = await axios.post(url, payload, {
             headers: { "Content-Type": "application/json" },
         });
-        console.log("Provider API Response:", response.data);
+        console.log("Provider API Success:", {
+            method: payload.method,
+            response: response.data,
+        });
         return response.data;
     } catch (error) {
-        console.error("Provider API Error:", error.response?.data || error.message);
+        console.error("Provider API Error:", {
+            method: payload.method,
+            error: error.response?.data || error.message,
+        });
         throw new Error(
-            `Provider API Error (${payload.method}): ${error.response?.data?.message || error.message}`
+            `Provider API Error for method ${payload.method}: ${error.response?.data?.message || error.message}`
         );
     }
 }
 
 // Error handler
 function handleError(res, message, details = null, statusCode = 500) {
-    console.error("Error:", message, details);
+    console.error("Error:", { message, details });
     res.status(statusCode).json({ success: false, message, details });
 }
 
 // Get Game List Handler
 exports.getlist = async (req, res) => {
     try {
-        const currency = req.body.currency || "EUR"; // Default to EUR if not provided
         const payload = {
             api_password: API_PASSWORD,
             api_login: API_USERNAME,
             method: "getGameList",
             show_systems: 0,
             show_additional: false,
-            currency,
+            currency: "EUR",
         };
 
         const response = await callProviderAPI(payload);
@@ -65,6 +70,7 @@ exports.getGame = async (req, res) => {
     try {
         const { gameid, lang = "en", play_for_fun = false, homeurl, username } = req.body;
 
+        // Validate inputs
         if (!gameid || typeof gameid !== "number") {
             return handleError(res, "Invalid or missing gameid.", null, 400);
         }
@@ -72,11 +78,13 @@ exports.getGame = async (req, res) => {
             return handleError(res, "Username is required.", null, 400);
         }
 
+        // Find user in the database
         const user = await User.findOne({ username });
         if (!user) {
             return handleError(res, "User not found.", null, 404);
         }
 
+        // Check balance for real money games
         if (!play_for_fun && user.balance <= 0) {
             return handleError(res, "Insufficient balance.", null, 400);
         }
@@ -87,14 +95,24 @@ exports.getGame = async (req, res) => {
             api_login: API_USERNAME,
             method: "loginPlayer",
             user_username: username,
-            user_password: username, // Use hashed password if needed
+            user_password: username, // If hashed, hash it before sending
             currency: "EUR",
         };
+
+        console.log("Login Player Payload:", loginPlayerPayload);
+
         const loginPlayerResponse = await callProviderAPI(loginPlayerPayload);
+
+        console.log("Login Player Response:", loginPlayerResponse);
 
         const sessionId = loginPlayerResponse.response?.sessionid;
         if (!sessionId) {
-            return handleError(res, "Provider login failed. Missing session ID.");
+            return handleError(
+                res,
+                "Provider login failed. Missing session ID.",
+                loginPlayerResponse,
+                500
+            );
         }
 
         // Get the game session
@@ -102,23 +120,34 @@ exports.getGame = async (req, res) => {
             api_password: API_PASSWORD,
             api_login: API_USERNAME,
             method: "getGame",
-            gameid: Number(gameid), // Ensure gameid is a number
+            gameid: Number(gameid),
             lang,
             play_for_fun,
             user_username: username,
             user_password: username,
+            sessionid: sessionId, // Include session ID from loginPlayer
             homeurl: homeurl || "https://catch-me.bet",
             currency: "EUR",
         };
+
+        console.log("Get Game Payload:", gamePayload);
+
         const gameResponse = await callProviderAPI(gamePayload);
 
-        const gameUrl = gameResponse.response;
-        const gamesessionId = gameResponse.gamesession_id;
+        console.log("Get Game Response:", gameResponse);
+
+        const gameUrl = gameResponse.response?.gameUrl;
+        const gamesessionId = gameResponse.response?.gamesessionId;
         if (!gameUrl || !gamesessionId) {
-            return handleError(res, "Provider did not return a valid game session or URL.");
+            return handleError(
+                res,
+                "Provider did not return a valid game session or URL.",
+                gameResponse,
+                500
+            );
         }
 
-        // Create game session record
+        // Create a new game session record
         const gameSession = await GameSession.create({
             userId: user._id,
             gameId: gameid,
