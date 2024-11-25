@@ -87,63 +87,29 @@ exports.getGame = async (req, res) => {
 
         console.log(`User balance before API call: ${user.balance}`);
 
-        // Step 1: Ensure the player exists
-        const playerExistsPayload = {
-            api_password: API_PASSWORD,
-            api_login: API_USERNAME,
-            method: "playerExists",
-            user_username: username,
-            currency: "EUR",
-        };
-
-        const playerExistsResponse = await callProviderAPI(playerExistsPayload);
-
-        if (!playerExistsResponse.response) {
-            // Player doesn't exist, create them
-            console.log(`Player does not exist. Creating player: ${username}`);
-
-            const createPlayerPayload = {
+        // Step 1: Sync balance to provider if necessary
+        if (!play_for_fun) {
+            const syncBalancePayload = {
                 api_password: API_PASSWORD,
                 api_login: API_USERNAME,
-                method: "createPlayer",
+                method: "giveMoney",
                 user_username: username,
                 user_password: username,
+                amount: user.balance.toFixed(2),
+                transactionid: `txn_${Date.now()}_${user._id}`,
                 currency: "EUR",
             };
 
-            const createPlayerResponse = await callProviderAPI(createPlayerPayload);
-            if (createPlayerResponse.error !== 0) {
-                throw new Error(`Failed to create player: ${createPlayerResponse.message}`);
+            const syncBalanceResponse = await callProviderAPI(syncBalancePayload);
+
+            if (syncBalanceResponse.error !== 0) {
+                return handleError(res, "Failed to sync balance to provider.", syncBalanceResponse, 500);
             }
 
-            console.log(`Player created successfully: ${createPlayerResponse.response.username}`);
+            console.log("Balance synchronized successfully.");
         }
 
-        // Step 2: Fetch current provider balance
-        const balancePayload = {
-            api_password: API_PASSWORD,
-            api_login: API_USERNAME,
-            method: "getPlayerBalance",
-            user_username: username,
-            user_password: username,
-            currency: "EUR",
-        };
-
-        const balanceResponse = await callProviderAPI(balancePayload);
-        const providerBalance = parseFloat(balanceResponse.response || "0.00");
-
-        // Update local balance if valid
-        if (!isNaN(providerBalance) && providerBalance > 0) {
-            user.balance = providerBalance;
-            await user.save();
-        }
-
-        // Check balance for real-money play
-        if (!play_for_fun && user.balance <= 0) {
-            return handleError(res, "Insufficient balance.", null, 400);
-        }
-
-        // Step 3: Login Player
+        // Step 2: Login Player
         const loginPlayerPayload = {
             api_password: API_PASSWORD,
             api_login: API_USERNAME,
@@ -152,7 +118,6 @@ exports.getGame = async (req, res) => {
             user_password: username,
             currency: "EUR",
         };
-
         const loginPlayerResponse = await callProviderAPI(loginPlayerPayload);
         const sessionId = loginPlayerResponse.response?.sessionid;
 
@@ -160,7 +125,9 @@ exports.getGame = async (req, res) => {
             return handleError(res, "Provider login failed. Missing session ID.");
         }
 
-        // Step 4: Get Game Session
+        console.log(`Session ID: ${sessionId}`);
+
+        // Step 3: Get Game Session
         const gamePayload = {
             api_password: API_PASSWORD,
             api_login: API_USERNAME,
@@ -174,17 +141,32 @@ exports.getGame = async (req, res) => {
             homeurl: homeurl || "https://catch-me.bet",
             currency: "EUR",
         };
-
         const gameResponse = await callProviderAPI(gamePayload);
+
         const gameUrl = gameResponse.response;
         const gamesessionId = gameResponse.gamesession_id;
 
         if (!gameUrl || !gamesessionId) {
-            return handleError(
-                res,
-                "Provider did not return a valid game session or URL.",
-                gameResponse
-            );
+            return handleError(res, "Provider did not return a valid game session or URL.", gameResponse);
+        }
+
+        // Step 4: Fetch final balance from provider
+        const fetchBalancePayload = {
+            api_password: API_PASSWORD,
+            api_login: API_USERNAME,
+            method: "getPlayerBalance",
+            user_username: username,
+            user_password: username,
+            currency: "EUR",
+        };
+
+        const fetchBalanceResponse = await callProviderAPI(fetchBalancePayload);
+        const finalProviderBalance = parseFloat(fetchBalanceResponse.response || "0.00");
+
+        if (!isNaN(finalProviderBalance)) {
+            console.log(`Updating user balance to provider's final balance: ${finalProviderBalance}`);
+            user.balance = finalProviderBalance;
+            await user.save();
         }
 
         res.status(200).json({
