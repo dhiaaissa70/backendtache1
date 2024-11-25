@@ -5,7 +5,7 @@ const GameSession = require("../models/gamesession");
 // Load environment variables
 const API_PASSWORD = process.env.API_PASSWORD;
 const API_USERNAME = process.env.API_USERNAME;
-const SALT = process.env.API_SALT; // Assurez-vous que cette clé est dans votre fichier .env pour plus de sécurité
+const SALT_KEY  = process.env.API_SALT; // Assurez-vous que cette clé est dans votre fichier .env pour plus de sécurité
 
 // Helper function to call the provider's API
 async function callProviderAPI(payload) {
@@ -28,10 +28,9 @@ async function callProviderAPI(payload) {
         );
     }
 }
-function generateKeyHash(data) {
-    const hash = crypto.createHash("sha256"); // Utilisation de SHA-256
-    hash.update(data + SALT); // Combinaison des données et du sel
-    return hash.digest("hex"); // Retourne la clé hachée en format hexadécimal
+function generateKey(salt, params) {
+    const queryString = querystring.stringify(params); // Convertit les paramètres en une chaîne de requête
+    return crypto.createHash('sha1').update(salt + queryString).digest('hex');
 }
 
 
@@ -234,7 +233,6 @@ exports.getuserbalance = async (req, res) => {
     }
 };
 
-
 exports.giveMoneytoUser = async (req, res) => {
     try {
         const { username, password, amount, transactionid } = req.body;
@@ -250,10 +248,8 @@ exports.giveMoneytoUser = async (req, res) => {
             return handleError(res, "Transaction ID est requis.", null, 400);
         }
 
-        // Générer le hash basé sur les données
-        const keyHash = generateKeyHash(`${username}${amount}${transactionid}`);
-
-        const payload = {
+        // Créer les paramètres de la requête sans la clé
+        const requestData = {
             api_password: API_PASSWORD,
             api_login: API_USERNAME,
             method: "giveMoney",
@@ -262,9 +258,15 @@ exports.giveMoneytoUser = async (req, res) => {
             amount,
             transactionid,
             currency: "EUR",
-            key_hash: keyHash, // Ajout du hash au payload
         };
 
+        // Générer le hachage
+        const key = generateKey(SALT_KEY, requestData);
+
+        // Ajouter la clé au payload final
+        const payload = { ...requestData, key };
+
+        // Appeler le fournisseur avec le payload
         const response = await callProviderAPI(payload);
 
         if (response.error !== 0) {
