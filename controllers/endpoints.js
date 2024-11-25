@@ -69,6 +69,7 @@ exports.getlist = async (req, res) => {
 };
 
 // Route to retrieve game session and synchronize wallet
+// Route to retrieve game session and synchronize wallet
 exports.getGame = async (req, res) => {
     try {
         const { gameid, lang = "en", play_for_fun = false, homeurl, username } = req.body;
@@ -109,36 +110,12 @@ exports.getGame = async (req, res) => {
             console.log("Failed to fetch valid provider balance. Using local balance.");
         }
 
-        // Step 2: Deduct balance (real mode only)
-        if (!play_for_fun) {
-            const transactionId = generateTransactionId();
-            const takeMoneyPayload = {
-                api_password: API_PASSWORD,
-                api_login: API_USERNAME,
-                method: "takeMoney",
-                user_username: username,
-                user_password: username,
-                amount: user.balance.toFixed(2), // Deduct all available balance
-                transactionid: transactionId,
-                currency: "EUR",
-            };
-            const takeMoneyResponse = await callProviderAPI(takeMoneyPayload);
-
-            if (takeMoneyResponse.error) {
-                return handleError(
-                    res,
-                    "Failed to deduct balance from provider.",
-                    takeMoneyResponse,
-                    400
-                );
-            }
-
-            console.log(`Successfully deducted balance: ${user.balance}`);
-            user.balance = 0; // Set local balance to 0 after deduction
-            await user.save();
+        // Ensure sufficient balance for real-money play
+        if (!play_for_fun && user.balance <= 0) {
+            return handleError(res, "Insufficient balance.", null, 400);
         }
 
-        // Step 3: Login Player
+        // Step 2: Login Player
         const loginPlayerPayload = {
             api_password: API_PASSWORD,
             api_login: API_USERNAME,
@@ -156,7 +133,7 @@ exports.getGame = async (req, res) => {
 
         console.log(`Session ID: ${sessionId}`);
 
-        // Step 4: Get Game Session
+        // Step 3: Get Game Session
         const gamePayload = {
             api_password: API_PASSWORD,
             api_login: API_USERNAME,
@@ -199,3 +176,4 @@ exports.getGame = async (req, res) => {
         handleError(res, "Error fetching game URL.", error.message);
     }
 };
+
