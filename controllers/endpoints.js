@@ -66,7 +66,6 @@ exports.getlist = async (req, res) => {
 };
 
 // Get Game Handler
-// Get Game Handler
 exports.getGame = async (req, res) => {
     try {
         const { gameid, lang = "en", play_for_fun = false, homeurl, username } = req.body;
@@ -95,15 +94,20 @@ exports.getGame = async (req, res) => {
             api_login: API_USERNAME,
             method: "loginPlayer",
             user_username: username,
-            user_password: username,
+            user_password: username, // Ensure the password matches the provider's requirements
             currency: "EUR",
         };
+
+        console.log("Login Player Payload:", loginPlayerPayload);
         const loginPlayerResponse = await callProviderAPI(loginPlayerPayload);
 
         const sessionId = loginPlayerResponse.response?.sessionid;
         if (!sessionId) {
-            return handleError(res, "Provider login failed. Missing session ID.");
+            console.error("Login Player Response:", loginPlayerResponse);
+            return handleError(res, "Provider login failed. Missing session ID.", loginPlayerResponse, 500);
         }
+
+        console.log("Login Player Response:", loginPlayerResponse);
 
         // Step 4: Fetch game session
         const gamePayload = {
@@ -119,26 +123,25 @@ exports.getGame = async (req, res) => {
             homeurl: homeurl || "https://catch-me.bet",
             currency: "EUR",
         };
+
+        console.log("Get Game Payload:", gamePayload);
         const gameResponse = await callProviderAPI(gamePayload);
 
         const gameUrl = gameResponse.response;
         const gamesessionId = gameResponse.gamesession_id;
         if (!gameUrl || !gamesessionId) {
+            console.error("Get Game Response:", gameResponse);
             return handleError(
                 res,
                 "Provider did not return a valid game session or URL.",
-                gameResponse
+                gameResponse,
+                500
             );
         }
 
-        // Step 5: Debugging Logs
-        console.log("Get Game Response:", {
-            sessionid: sessionId,
-            gamesession_id: gamesessionId,
-            gameUrl,
-        });
+        console.log("Get Game Response:", gameResponse);
 
-        // Step 6: Return game URL with session info
+        // Step 5: Return game URL with session info
         res.status(200).json({
             success: true,
             data: {
