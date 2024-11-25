@@ -307,3 +307,46 @@ exports.giveMoneytoUser = async (req, res) => {
         handleError(res, "Erreur lors de la transmission de fonds.", error.message);
     }
 };
+
+
+exports.createPlayer = async (req, res) => {
+    try {
+        const { user_username, user_password, currency = "EUR" } = req.body;
+
+        // Validation des données entrantes
+        if (!user_username || !user_password) {
+            return handleError(res, "Username et password sont requis.", null, 400);
+        }
+
+        const payload = {
+            api_password: API_PASSWORD, 
+            api_login: API_USERNAME,
+            method: "createPlayer",
+            user_username,
+            user_password,
+            currency,
+        };
+
+        console.log("[DEBUG] createPlayer Payload:", payload);
+
+        const response = await callProviderAPI(payload);
+
+        if (response.error !== 0) {
+            return handleError(
+                res,
+                "Échec de la création de l'utilisateur auprès du fournisseur.",
+                response,
+                500
+            );
+        }
+
+        res.status(200).json({
+            success: true,
+            message: "Utilisateur créé avec succès.",
+            data: response.response,
+        });
+    } catch (error) {
+        console.error("[ERROR] createPlayer Exception:", error);
+        handleError(res, "Erreur lors de la création de l'utilisateur.", error.message);
+    }
+};

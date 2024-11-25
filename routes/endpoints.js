@@ -12,4 +12,7 @@ router.post("/getUserbalance", endpointController.getuserbalance);
 
 router.post("/givemoney", endpointController.giveMoneytoUser);
 
+router.post("/createplayer", endpointController.createPlayer);
+
+
 module.exports = router;
