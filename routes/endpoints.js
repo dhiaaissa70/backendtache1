@@ -10,5 +10,6 @@ router.post("/get-game", endpointController.getGame);
 
 router.post("/getUserbalance", endpointController.getuserbalance);
 
+router.post("/givemoney", endpointController.giveMoneytoUser);
 
 module.exports = router;
