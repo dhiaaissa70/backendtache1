@@ -294,13 +294,16 @@ exports.giveMoneytoUser = async (req, res) => {
         const response = await callProviderAPI(payload);
 
         if (response.error !== 0) {
-            return handleError(
-                res,
-                "Échec de la transmission de fonds à l'utilisateur auprès du fournisseur.",
-                response,
-                500
-            );
+            return res.status(500).json({
+                success: false,
+                message: "Échec de la transmission de fonds à l'utilisateur auprès du fournisseur.",
+                details: {
+                    error: response.error,
+                    providerMessage: response.message,
+                },
+            });
         }
+        
 
         res.status(200).json({ success: true, data: response.response });
     } catch (error) {
