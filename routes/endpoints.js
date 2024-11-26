@@ -19,23 +19,23 @@ router.get("/balance", endpointController.getBalance); // Respond with user bala
 
 
 
-//router.get('/', (req, res) => {
+router.get('/', (req, res) => {
 
-//const {action }= req.query;
-
-
-//if (action === "balance") {
-
-     //return endpointController.getBalance(req,res);
-//}
-
-//return " missing";
-
-//}
+const {action }= req.query;
 
 
+if (action === "balance") {
 
-//);
+     return endpointController.getBalance(req,res);
+}
+
+return " missing";
+
+}
+
+
+
+);
 
 // 6. Route to handle debit (bet) callback
 router.get("/debit", endpointController.debit); // Deduct bet amount from user's balance

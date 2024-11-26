@@ -244,56 +244,56 @@ exports.getlist = async (req, res) => {
   };
 
 // 4. Get Balance
+// Updated getBalance route
 exports.getBalance = async (req, res) => {
-    const { remote_id, session_id, currency, username, game_id_hash } = req.query;
+    const { remote_id, session_id, currency, username, game_id_hash, gamesession_id } = req.query;
   
-    if (!remote_id || !username || !currency) {
-      // Minimal checks as recommended
+    // Validate required parameters
+    if (!remote_id || !username || !currency || !session_id || !game_id_hash) {
       console.error("[ERROR] Missing required parameters for getBalance.");
       return res.status(200).json({ status: "400", message: "Missing required parameters." });
     }
   
     try {
-      // Step 1: Validate the request's key
-      const queryParams = { 
-        remote_id, 
-        session_id, 
-        currency, 
-        username, 
-        game_id_hash, 
-        action: "balance" 
+      // Prepare query parameters
+      const params = {
+        action: "balance",
+        callerId: API_USERNAME,
+        callerPassword: API_PASSWORD,
+        callerPrefix: "700ha", // Update prefix if needed
+        remote_id,
+        username,
+        session_id,
+        currency,
+        provider: "lg", // Example: Replace with your provider
+        game_id_hash,
+        gamesession_id,
       };
   
-      const expectedKey = generateKey(queryParams); // Using your API_SALT
-      const incomingKey = req.query.key;
+      // Generate SHA1 key
+      const key = generateKey(params);
+      params.key = key;
   
-      /*if (expectedKey !== incomingKey) {
-        console.error("[ERROR] Invalid key for balance request.");
-        return res.status(200).json({ status: "400", message: "Invalid key." });
-      }*/
+      console.log("[DEBUG] Balance API Query Params:", params);
   
-      // Step 2: Fetch the player's balance using remote_id
-      const player = await User.findOne({ remote_id }); // Ensure remote_id is stored during `createPlayer`.
+      // Call Provider API
+      const response = await callProviderAPI(params);
   
-      if (!player) {
-        console.error("[ERROR] Player not found for remote_id:", remote_id);
-        return res.status(200).json({ status: "404", balance: 0, message: "Player not found." });
+      if (response.error === 0) {
+        return res.status(200).json({ status: "200", balance: response.balance || "0.00" });
+      } else {
+        console.error("[ERROR] Provider API Error:", response);
+        return res.status(200).json({ status: "500", message: response.message || "Balance error" });
       }
-  
-      const balance = player.balance; // Assume you have a `balance` field in your `User` model.
-  
-      // Step 3: Return the player's balance
-      return res.status(200).json({ status: "200", balance: balance.toFixed(2) });
     } catch (error) {
       console.error("[ERROR] Unexpected error in getBalance:", error.message);
-  
-      // Step 4: Respond with a general error message
       return res.status(500).json({
         status: "500",
         message: "Internal server error. Please try again later.",
       });
     }
   };
+  
   
 
 // 5. Debit (Bet)
