@@ -10,10 +10,10 @@ const BASE_URL = process.env.BASE_URL; // The base provider URL (e.g., {{urlstag
 
 // Helper function to generate SHA1 key
 async function callProviderAPI(payload) {
-    const url = "https://stage.game-program.com/api/seamless/provider";
+    const url = `${BASE_URL}?${new URLSearchParams(payload).toString()}`;
+    console.log("Calling Provider API with URL:", url);
     try {
-      console.log("Calling Provider API:", payload);
-      const response = await axios.post(url, payload, {
+      const response = await axios.get(url, {
         headers: { "Content-Type": "application/json" },
       });
       console.log("Provider API Response:", response.data);
@@ -29,8 +29,10 @@ async function callProviderAPI(payload) {
   // Utility function to generate SHA1 key
   function generateKey(params) {
     const queryString = new URLSearchParams(params).toString();
-    return crypto.createHash("sha1").update(API_SALT + queryString).digest("hex");
+    console.log("[DEBUG] String for SHA1:", `${API_SALT}${queryString}`);
+    return crypto.createHash("sha1").update(`${API_SALT}${queryString}`).digest("hex");
   }
+  
   
   // Error handler function
   function handleError(res, message, statusCode = 500) {
