@@ -6,7 +6,24 @@ exports.generateTransactionId = () => {
 };
 
 // Generate SHA1 hash for `key`
-exports.generateKey = (payload, salt) => {
-    const queryString = new URLSearchParams(payload).toString();
-    return crypto.createHash("sha1").update(salt + queryString).digest("hex");
-};
+function generateKeys(params) {
+    // Sort the parameters alphabetically by key to ensure consistency
+    const sortedParams = Object.keys(params)
+        .sort()
+        .reduce((acc, key) => {
+            if (params[key] !== undefined && params[key] !== null) {
+                acc[key] = params[key]; // Include only defined values
+            }
+            return acc;
+        }, {});
+
+    // Convert the sorted parameters to a query string
+    const queryString = new URLSearchParams(sortedParams).toString();
+
+    // Combine the API_SALT with the query string and hash it
+    const hash = crypto.createHash("sha1").update(process.env.API_SALT + queryString).digest("hex");
+
+    return hash;
+}
+
+module.exports = { generateKey };

@@ -13,7 +13,7 @@ router.post("/create-player", endpointController.createPlayer);
 router.post("/get-game", endpointController.getGame);
 
 // Callback Handlers
-router.get("/balance", endpointController.getBalance);
+router.get("/api", endpointController.getBalance); // Respond to balance requests from the provider
 router.get("/debit", endpointController.debit);
 router.get("/credit", endpointController.credit);
 router.get("/rollback", endpointController.rollback);

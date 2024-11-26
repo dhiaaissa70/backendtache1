@@ -1,6 +1,7 @@
 const axios = require("axios");
 const crypto = require("crypto");
 const User = require("../models/User"); // User model for DB operations
+const { generateKeys } = require("../utils/utils"); // Ensure the generateKey function is available
 
 // Load API configuration
 const API_PASSWORD = process.env.API_PASSWORD;
@@ -249,45 +250,68 @@ exports.getGame = async (req, res) => {
   
 
 // 4. Handle Balance Callback
+// Import required dependencies and models
+ // Ensure the generateKey function is available
+
 exports.getBalance = async (req, res) => {
-    const {
-      remote_id, // Unique player ID in the provider's system
-      session_id,
-      currency,
-      username,
-      game_id_hash,
-      gamesession_id,
-    } = req.query;
-  
-    // Validate required parameters
-    if (!remote_id || !username || !currency) {
-      console.error("[ERROR] Missing required parameters for getBalance.");
-      return res.status(400).json({ status: "400", message: "Missing required parameters." });
-    }
-  
     try {
-      // Fetch the player from your database using the username or remote_id
-      const player = await User.findOne({ username });
-  
-      if (!player) {
-        console.error(`[ERROR] Player not found for username: ${username}`);
-        return res.status(404).json({ status: "404", message: "Player not found." });
-      }
-  
-      // Return the player's balance from your database
-      return res.status(200).json({
-        status: "200",
-        balance: player.balance.toFixed(2), // Ensure balance is a 2-decimal string
-      });
+        const {
+            callerId, // Caller authentication username
+            callerPassword, // Caller authentication password
+            remote_id, // Unique player id
+            username, // Player username
+            session_id, // Game session ID
+            currency, // Player's currency
+            gamesession_id, // Session ID from the game provider
+            key, // SHA1 validation key
+        } = req.query;
+
+        // Validate required fields
+        if (!remote_id || !username || !currency) {
+            console.error("[ERROR] Missing required parameters for balance request.");
+            return res.status(400).json({ status: "400", message: "Missing required parameters." });
+        }
+
+        // Step 1: Verify the key (optional, recommended for validation)
+        const queryParams = {
+            callerId,
+            callerPassword,
+            remote_id,
+            username,
+            session_id,
+            currency,
+            gamesession_id,
+            action: "balance",
+        };
+
+        const expectedKey = generateKeys(queryParams); // Generate the expected key
+        if (expectedKey !== key) {
+            console.error("[ERROR] Invalid key for balance request.");
+            return res.status(400).json({ status: "400", message: "Invalid key." });
+        }
+
+        // Step 2: Fetch the player's balance from the database
+        const user = await User.findOne({ username }); // Find the user by username
+        if (!user) {
+            console.error("[ERROR] Player not found:", username);
+            return res.status(404).json({ status: "404", balance: 0, message: "Player not found." });
+        }
+
+        // Step 3: Return the player's balance in the required format
+        console.log(`[INFO] Balance request successful for user: ${username}, balance: ${user.balance}`);
+        return res.status(200).json({
+            status: "200", // Always return status 200 for success
+            balance: user.balance.toFixed(2), // Balance as a two-decimal number
+        });
     } catch (error) {
-      console.error("[ERROR] Unexpected error in getBalance:", error.message);
-      return res.status(500).json({
-        status: "500",
-        message: "Internal server error. Please try again later.",
-      });
+        console.error("[ERROR] Unexpected error in getBalance:", error.message);
+        return res.status(500).json({
+            status: "500",
+            message: "Internal server error. Please try again later.",
+        });
     }
-  };
-  
+};
+
 
 // 5. Handle Debit (Bet)
 exports.debit = async (req, res) => {
