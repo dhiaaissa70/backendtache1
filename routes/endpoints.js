@@ -12,7 +12,7 @@ router.post("/get-game", endpointController.getGame); // Retrieve game launch UR
 router.post("/getUserbalance", endpointController.getuserbalance); // Fetch user balance from provider
 
 // Route to transfer funds to a user
-router.post("/givemoney", endpointController.giveMoneytoUser); // Send funds to the user
+//router.post("/givemoney", endpointController.giveMoneytoUser); // Send funds to the user
 
 // Route to create a new player
 router.post("/createplayer", endpointController.createPlayer); // Create a new player account
