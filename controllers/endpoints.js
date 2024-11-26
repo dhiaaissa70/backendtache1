@@ -122,41 +122,79 @@ exports.getlist = async (req, res) => {
 };
 
 // 3. Get Game
+// 3. Get Game
 exports.getGame = async (req, res) => {
-  const { gameid, username, play_for_fun = false, lang = "en" } = req.body;
-
-  if (!gameid || !username)
-    return handleError(res, "Game ID and username are required", 400);
-
-  try {
-    const user = await User.findOne({ username });
-    if (!user) return handleError(res, "User not found", 404);
-
-    const payload = {
-      api_password: API_PASSWORD,
-      api_login: API_USERNAME,
-      method: "getGame",
-      gameid,
-      user_username: username,
-      user_password: username,
-      play_for_fun,
-      lang,
-      currency: "EUR",
-    };
-
-    const response = await callProviderAPI(payload);
-
-    if (response.error === 0) {
-      const queryKey = generateKey(payload);
-      const gameUrl = `${response.response}&key=${queryKey}`;
-      res.status(200).json({ success: true, data: { gameUrl } });
-    } else {
-      handleError(res, response.message, 400);
+    const { gameid, username, play_for_fun = false, lang = "en" } = req.body;
+  
+    if (!gameid || !username)
+      return handleError(res, "Game ID and username are required", 400);
+  
+    try {
+      let user = await User.findOne({ username });
+      if (!user) return handleError(res, "User not found in local database", 404);
+  
+      // Step 1: Check if the player exists in the provider's system
+      const playerExistsPayload = {
+        api_password: API_PASSWORD,
+        api_login: API_USERNAME,
+        method: "playerExists",
+        user_username: username,
+      };
+  
+      const playerExistsResponse = await callProviderAPI(playerExistsPayload);
+  
+      if (playerExistsResponse.error !== 0) {
+        console.log(`[DEBUG] Player does not exist. Creating player: ${username}`);
+  
+        // Step 2: Create the player if they don't exist
+        const createPlayerPayload = {
+          api_password: API_PASSWORD,
+          api_login: API_USERNAME,
+          method: "createPlayer",
+          user_username: username,
+          user_password: username, // Using username as password for simplicity
+          currency: "EUR",
+        };
+  
+        const createPlayerResponse = await callProviderAPI(createPlayerPayload);
+  
+        if (createPlayerResponse.error !== 0) {
+          return handleError(
+            res,
+            `Failed to create player: ${createPlayerResponse.message}`,
+            400
+          );
+        }
+        console.log(`[DEBUG] Player created successfully: ${username}`);
+      }
+  
+      // Step 3: Fetch the game URL
+      const payload = {
+        api_password: API_PASSWORD,
+        api_login: API_USERNAME,
+        method: "getGame",
+        gameid,
+        user_username: username,
+        user_password: username, // Using username as password for simplicity
+        play_for_fun,
+        lang,
+        currency: "EUR",
+      };
+  
+      const response = await callProviderAPI(payload);
+  
+      if (response.error === 0) {
+        const queryKey = generateKey(payload);
+        const gameUrl = `${response.response}&key=${queryKey}`;
+        res.status(200).json({ success: true, data: { gameUrl } });
+      } else {
+        handleError(res, response.message, 400);
+      }
+    } catch (error) {
+      handleError(res, error.message);
     }
-  } catch (error) {
-    handleError(res, error.message);
-  }
-};
+  };
+  
 
 // 4. Balance Callback
 exports.getBalance = async (req, res) => {
