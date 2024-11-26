@@ -18,6 +18,6 @@ router.post("/givemoney", endpointController.giveMoneytoUser); // Send funds to 
 router.post("/createplayer", endpointController.createPlayer); // Create a new player account
 
 // Route to log in an existing player
-router.post("/loginPlayer", endpointController.loginPlayer); // Log in the user via provider API
+//router.post("/loginPlayer", endpointController.loginPlayer); // Log in the user via provider API
 
 module.exports = router;
