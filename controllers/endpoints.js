@@ -1,31 +1,14 @@
 const axios = require("axios");
 const crypto = require("crypto");
 const User = require("../models/User");
-const Transfer = require("../models/transfer"); // Updated to use Transfer model
+const Transfer = require("../models/transfer");
 
 const API_PASSWORD = process.env.API_PASSWORD;
 const API_USERNAME = process.env.API_USERNAME;
 const API_SALT = process.env.API_SALT;
+const BASE_URL = process.env.BASE_URL; // The base provider URL (e.g., {{urlstage}})
 
-// Helper function to call the provider's API
-async function callProviderAPI(payload) {
-  const url = "https://stage.game-program.com/api/seamless/provider";
-  try {
-    console.log("Calling Provider API:", payload);
-    const response = await axios.post(url, payload, {
-      headers: { "Content-Type": "application/json" },
-    });
-    console.log("Provider API Response:", response.data);
-    return response.data;
-  } catch (error) {
-    console.error("Provider API Error:", error.response?.data || error.message);
-    throw new Error(
-      error.response?.data?.message || "Error communicating with provider"
-    );
-  }
-}
-
-// Utility function to generate SHA1 key
+// Helper function to generate SHA1 key
 function generateKey(params) {
   const queryString = new URLSearchParams(params).toString();
   return crypto.createHash("sha1").update(API_SALT + queryString).digest("hex");
@@ -36,33 +19,48 @@ function handleError(res, message, statusCode = 500) {
   res.status(statusCode).json({ status: statusCode, message });
 }
 
+// Helper to call provider's API
+async function callProviderAPI(payload) {
+  const url = `${BASE_URL}?${new URLSearchParams(payload).toString()}`;
+  try {
+    console.log("[DEBUG] Calling Provider API:", url);
+    const response = await axios.get(url);
+    console.log("[DEBUG] Provider API Response:", response.data);
+    return response.data;
+  } catch (error) {
+    console.error("[ERROR] Provider API Error:", error.response?.data || error.message);
+    throw new Error(error.response?.data?.message || "Error communicating with provider");
+  }
+}
+
 // 1. Check if player exists
 exports.playerExists = async (req, res) => {
-    const { username, currency = "EUR" } = req.body; // Default currency to EUR if not provided
-  
-    if (!username) return handleError(res, "Username is required", 400);
-  
-    try {
-      const payload = {
-        api_password: API_PASSWORD,
-        api_login: API_USERNAME,
-        method: "playerExists",
-        user_username: username,
-        currency, // Include currency in the request
-      };
-  
-      const response = await callProviderAPI(payload);
-  
-      if (response.error === 0 && response.response) {
-        res.status(200).json({ success: true, data: response.response });
-      } else {
-        res.status(404).json({ success: false, message: "Player does not exist" });
-      }
-    } catch (error) {
-      handleError(res, error.message);
+  const { username, currency = "EUR" } = req.body;
+
+  if (!username) return handleError(res, "Username is required", 400);
+
+  try {
+    const payload = {
+      callerId: API_USERNAME,
+      callerPassword: API_PASSWORD,
+      callerPrefix: "700ha",
+      action: "playerExists",
+      user_username: username,
+      currency,
+    };
+
+    const response = await callProviderAPI(payload);
+
+    if (response.error === 0 && response.response) {
+      res.status(200).json({ success: true, data: response.response });
+    } else {
+      res.status(404).json({ success: false, message: "Player does not exist" });
     }
-  };
-  
+  } catch (error) {
+    handleError(res, error.message);
+  }
+};
+
 // 2. Create player
 exports.createPlayer = async (req, res) => {
   const { username, password, currency = "EUR" } = req.body;
@@ -72,9 +70,10 @@ exports.createPlayer = async (req, res) => {
 
   try {
     const payload = {
-      api_password: API_PASSWORD,
-      api_login: API_USERNAME,
-      method: "createPlayer",
+      callerId: API_USERNAME,
+      callerPassword: API_PASSWORD,
+      callerPrefix: "700ha",
+      action: "createPlayer",
       user_username: username,
       user_password: password,
       currency,
@@ -92,261 +91,256 @@ exports.createPlayer = async (req, res) => {
   }
 };
 
-// Route to fetch game list
-exports.getlist = async (req, res) => {
-    try {
-        const payload = {
-            api_password: API_PASSWORD,
-            api_login: API_USERNAME,
-            method: "getGameList",
-            show_systems: 0,
-            show_additional: false,
-            currency: "EUR",
-        };
-
-        console.log("[DEBUG] Fetching game list with payload:", payload);
-        const response = await callProviderAPI(payload);
-
-        if (response.error !== 0) {
-            return handleError(
-                res,
-                "Failed to fetch game list from provider.",
-                response,
-                500
-            );
-        }
-
-        res.status(200).json({ success: true, data: response.response });
-    } catch (error) {
-        handleError(res, "Error fetching game list.", error.message);
-    }
-};
-
-// 3. Get Game
 // 3. Get Game
 exports.getGame = async (req, res) => {
-    const { gameid, username, play_for_fun = false, lang = "en", currency = "EUR" } = req.body;
-  
-    if (!gameid || !username)
-      return handleError(res, "Game ID and username are required", 400);
-  
-    try {
-      let user = await User.findOne({ username });
-      if (!user) return handleError(res, "User not found in local database", 404);
-  
-      // Step 1: Check if the player exists in the provider's system
-      const playerExistsPayload = {
-        api_password: API_PASSWORD,
-        api_login: API_USERNAME,
-        method: "playerExists",
-        user_username: username,
-        currency, // Add currency field
-      };
-  
-      const playerExistsResponse = await callProviderAPI(playerExistsPayload);
-  
-      if (playerExistsResponse.error !== 0) {
-        console.log(`[DEBUG] Player does not exist. Creating player: ${username}`);
-  
-        // Step 2: Create the player if they don't exist
-        const createPlayerPayload = {
-          api_password: API_PASSWORD,
-          api_login: API_USERNAME,
-          method: "createPlayer",
-          user_username: username,
-          user_password: username, // Use username as password (simplified logic)
-          currency, // Add currency field
-        };
-  
-        const createPlayerResponse = await callProviderAPI(createPlayerPayload);
-  
-        if (createPlayerResponse.error !== 0) {
-          // Handle "Player already exists" error gracefully
-          if (createPlayerResponse.message.includes("Player already exists")) {
-            console.log(`[DEBUG] Player already exists in the provider system.`);
-          } else {
-            return handleError(
-              res,
-              `Failed to create player: ${createPlayerResponse.message}`,
-              400
-            );
-          }
-        }
-      }
-  
-      // Step 3: Fetch the game URL
-      const payload = {
-        api_password: API_PASSWORD,
-        api_login: API_USERNAME,
-        method: "getGame",
-        gameid,
-        user_username: username,
-        user_password: username,
-        play_for_fun,
-        lang,
-        currency,
-      };
-  
-      const response = await callProviderAPI(payload);
-  
-      if (response.error === 0) {
-        const queryKey = generateKey(payload);
-        const gameUrl = `${response.response}&key=${queryKey}`;
-        res.status(200).json({ success: true, data: { gameUrl } });
-      } else {
-        handleError(res, response.message, 400);
-      }
-    } catch (error) {
-      handleError(res, error.message);
-    }
-  };
-  
-  
+  const { gameid, username, play_for_fun = false, lang = "en", currency = "EUR" } = req.body;
 
-// 4. Balance Callback
+  if (!gameid || !username)
+    return handleError(res, "Game ID and username are required", 400);
+
+  try {
+    const payload = {
+      callerId: API_USERNAME,
+      callerPassword: API_PASSWORD,
+      callerPrefix: "700ha",
+      action: "getGame",
+      gameid,
+      user_username: username,
+      user_password: username,
+      play_for_fun,
+      lang,
+      currency,
+    };
+
+    const response = await callProviderAPI(payload);
+
+    if (response.error === 0) {
+      const queryKey = generateKey(payload);
+      const gameUrl = `${response.response}&key=${queryKey}`;
+      res.status(200).json({ success: true, data: { gameUrl } });
+    } else {
+      handleError(res, response.message, 400);
+    }
+  } catch (error) {
+    handleError(res, error.message);
+  }
+};
+
+// 4. Get Balance
 exports.getBalance = async (req, res) => {
-  const { username } = req.query;
+  const { username, remote_id, session_id, currency, provider, game_id_hash } = req.query;
 
-  if (!username) return handleError(res, "Username is required", 400);
+  if (!username || !remote_id || !session_id || !currency || !provider || !game_id_hash) {
+    return handleError(res, "Missing required parameters", 400);
+  }
 
   try {
-    const user = await User.findOne({ username });
-    if (!user) return handleError(res, "User not found", 404);
+    const params = {
+      callerId: API_USERNAME,
+      callerPassword: API_PASSWORD,
+      callerPrefix: "700h",
+      action: "balance",
+      remote_id,
+      username,
+      session_id,
+      currency,
+      provider,
+      game_id_hash,
+    };
 
-    res.status(200).json({ status: "200", balance: user.balance });
+    const key = generateKey(params);
+    params.key = key;
+
+    const response = await callProviderAPI(params);
+    res.status(200).json(response);
   } catch (error) {
     handleError(res, error.message);
   }
 };
 
-// 5. Debit Callback
+// 5. Debit (Bet)
 exports.debit = async (req, res) => {
-    const { username, receiverId, amount, transaction_id } = req.query;
-  
-    // Validate input
-    if (!username || !receiverId || !amount || !transaction_id) {
-      return handleError(res, "Invalid parameters. Ensure username, receiverId, amount, and transaction_id are provided.", 400);
-    }
-  
-    try {
-      // Fetch sender (username) and receiver (receiverId) details
-      const sender = await User.findOne({ username });
-      const receiver = await User.findById(receiverId);
-  
-      if (!sender) return handleError(res, "Sender not found", 404);
-      if (!receiver) return handleError(res, "Receiver not found", 404);
-  
-      // Ensure sender has sufficient balance
-      if (sender.balance < amount) {
-        return res.status(403).json({ status: "403", msg: "Insufficient funds" });
-      }
-  
-      // Store balances before the transaction
-      const senderBalanceBefore = sender.balance;
-      const receiverBalanceBefore = receiver.balance;
-  
-      // Deduct balance from sender and add to receiver
-      sender.balance -= parseFloat(amount);
-      receiver.balance += parseFloat(amount);
-  
-      // Save updated balances
-      await sender.save();
-      await receiver.save();
-  
-      // Log the transfer
-      await Transfer.create({
-        senderId: sender._id, // Sender's ID
-        receiverId: receiver._id, // Receiver's ID
-        type: "debit", // Transaction type
-        amount: parseFloat(amount),
-        note: `Transfer from ${sender.username} to ${receiver.username} for transaction ID: ${transaction_id}`,
-        balanceBefore: {
-          sender: senderBalanceBefore,
-          receiver: receiverBalanceBefore,
-        },
-        balanceAfter: {
-          sender: sender.balance,
-          receiver: receiver.balance,
-        },
-      });
-  
-      // Respond with the updated balances
-      res.status(200).json({
-        status: "200",
-        message: `Transfer successful: ${amount} transferred from ${sender.username} to ${receiver.username}`,
-        senderBalance: sender.balance,
-        receiverBalance: receiver.balance,
-      });
-    } catch (error) {
-      handleError(res, error.message);
-    }
-  };
-  
+  const {
+    username,
+    remote_id,
+    session_id,
+    amount,
+    provider,
+    game_id,
+    game_id_hash,
+    transaction_id,
+    round_id,
+    gameplay_final,
+    is_freeround_bet,
+    jackpot_contribution_in_amount,
+    gamesession_id,
+  } = req.query;
 
-// 6. Credit Callback
-exports.credit = async (req, res) => {
-  const { username, amount, transaction_id } = req.query;
-
-  if (!username || !amount || !transaction_id)
-    return handleError(res, "Invalid parameters", 400);
+  if (
+    !username ||
+    !remote_id ||
+    !session_id ||
+    !amount ||
+    !provider ||
+    !game_id ||
+    !game_id_hash ||
+    !transaction_id ||
+    !round_id ||
+    !gamesession_id
+  ) {
+    return handleError(res, "Missing required parameters", 400);
+  }
 
   try {
-    const user = await User.findOne({ username });
-    if (!user) return handleError(res, "User not found", 404);
-
-    // Add balance and track transaction
-    const previousBalance = user.balance;
-    user.balance += parseFloat(amount);
-    await user.save();
-
-    await Transfer.create({
-      senderId: null, // No sender for credit
-      receiverId: user._id,
-      type: "credit",
+    const params = {
+      callerId: API_USERNAME,
+      callerPassword: API_PASSWORD,
+      callerPrefix: "700ha",
+      action: "debit",
+      remote_id,
+      username,
+      session_id,
       amount,
-      note: `Credit for transaction ID: ${transaction_id}`,
-      balancesBefore: {
-        sender: 0, // No sender for credit
-        receiver: previousBalance,
-      },
-      balancesAfter: {
-        sender: 0, // No sender for credit
-        receiver: user.balance,
-      },
-    });
+      provider,
+      game_id,
+      game_id_hash,
+      transaction_id,
+      round_id,
+      gameplay_final,
+      is_freeround_bet,
+      jackpot_contribution_in_amount,
+      gamesession_id,
+    };
 
-    res.status(200).json({ status: "200", balance: user.balance });
+    const key = generateKey(params);
+    params.key = key;
+
+    const response = await callProviderAPI(params);
+    res.status(200).json(response);
   } catch (error) {
     handleError(res, error.message);
   }
 };
 
-// 7. Rollback Callback
-exports.rollback = async (req, res) => {
-  const { transaction_id } = req.query;
+// 6. Credit (Win)
+exports.credit = async (req, res) => {
+  const {
+    username,
+    remote_id,
+    session_id,
+    amount,
+    provider,
+    game_id,
+    game_id_hash,
+    transaction_id,
+    round_id,
+    gameplay_final,
+    is_freeround_bet,
+    jackpot_contribution_in_amount,
+    gamesession_id,
+  } = req.query;
 
-  if (!transaction_id)
-    return handleError(res, "Transaction ID is required", 400);
+  if (
+    !username ||
+    !remote_id ||
+    !session_id ||
+    !amount ||
+    !provider ||
+    !game_id ||
+    !game_id_hash ||
+    !transaction_id ||
+    !round_id ||
+    !gamesession_id
+  ) {
+    return handleError(res, "Missing required parameters", 400);
+  }
 
   try {
-    const transaction = await Transfer.findOne({ note: new RegExp(transaction_id) });
-    if (!transaction) return handleError(res, "Transaction not found", 404);
+    const params = {
+      callerId: API_USERNAME,
+      callerPassword: API_PASSWORD,
+      callerPrefix: "700ha",
+      action: "credit",
+      remote_id,
+      username,
+      session_id,
+      amount,
+      provider,
+      game_id,
+      game_id_hash,
+      transaction_id,
+      round_id,
+      gameplay_final,
+      is_freeround_bet,
+      jackpot_contribution_in_amount,
+      gamesession_id,
+    };
 
-    const user = transaction.type === "debit" 
-      ? await User.findById(transaction.senderId)
-      : await User.findById(transaction.receiverId);
+    const key = generateKey(params);
+    params.key = key;
 
-    if (!user) return handleError(res, "User not found", 404);
+    const response = await callProviderAPI(params);
+    res.status(200).json(response);
+  } catch (error) {
+    handleError(res, error.message);
+  }
+};
 
-    // Rollback transaction
-    if (transaction.type === "debit") {
-      user.balance += transaction.amount;
-    } else if (transaction.type === "credit") {
-      user.balance -= transaction.amount;
-    }
-    await user.save();
+// 7. Rollback
+exports.rollback = async (req, res) => {
+  const {
+    username,
+    remote_id,
+    session_id,
+    amount,
+    provider,
+    game_id,
+    game_id_hash,
+    transaction_id,
+    round_id,
+    gameplay_final,
+    gamesession_id,
+  } = req.query;
 
-    res.status(200).json({ status: "200", balance: user.balance });
+  if (
+    !username ||
+    !remote_id ||
+    !session_id ||
+    !amount ||
+    !provider ||
+    !game_id ||
+    !game_id_hash ||
+    !transaction_id ||
+    !round_id ||
+    !gamesession_id
+  ) {
+    return handleError(res, "Missing required parameters", 400);
+  }
+
+  try {
+    const params = {
+      callerId: API_USERNAME,
+      callerPassword: API_PASSWORD,
+      callerPrefix: "700ha",
+      action: "rollback",
+      remote_id,
+      username,
+      session_id,
+      amount,
+      provider,
+      game_id,
+      game_id_hash,
+      transaction_id,
+      round_id,
+      gameplay_final,
+      gamesession_id,
+    };
+
+    const key = generateKey(params);
+    params.key = key;
+
+    const response = await callProviderAPI(params);
+    res.status(200).json(response);
   } catch (error) {
     handleError(res, error.message);
   }
