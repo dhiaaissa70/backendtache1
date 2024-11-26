@@ -6,7 +6,7 @@ const Transfer = require("../models/transfer");
 const API_PASSWORD = process.env.API_PASSWORD;
 const API_USERNAME = process.env.API_USERNAME;
 const API_SALT = process.env.API_SALT;
-const BASE_URL = process.env.BASE_URL; // The base provider URL (e.g., {{urlstage}})
+const BASE_URL = "https://stage.game-program.com/api/seamless/provider" // The base provider URL (e.g., {{urlstage}})
 
 // Helper function to generate SHA1 key
 async function callProviderAPI(payload) {
@@ -25,6 +25,7 @@ async function callProviderAPI(payload) {
       );
     }
   }
+  
   
   // Utility function to generate SHA1 key
   function generateKey(params) {
