@@ -1,7 +1,7 @@
 const axios = require("axios");
 const crypto = require("crypto");
 const User = require("../models/User");
-const Transaction = require("../models/Transaction"); // A model to track transactions in your DB
+const Transfer = require("../models/transfer"); // Updated to use Transfer model
 
 const API_PASSWORD = process.env.API_PASSWORD;
 const API_USERNAME = process.env.API_USERNAME;
@@ -158,12 +158,26 @@ exports.debit = async (req, res) => {
     if (user.balance < amount)
       return res.status(403).json({ status: "403", msg: "Insufficient funds" });
 
-    // Deduct balance
+    // Deduct balance and track transaction
+    const previousBalance = user.balance;
     user.balance -= parseFloat(amount);
     await user.save();
 
-    // Save transaction
-    await Transaction.create({ username, amount, transaction_id, type: "debit" });
+    await Transfer.create({
+      senderId: user._id,
+      receiverId: null,
+      type: "debit",
+      amount,
+      note: `Debit for transaction ID: ${transaction_id}`,
+      balancesBefore: {
+        sender: previousBalance,
+        receiver: 0, // No receiver for debit
+      },
+      balancesAfter: {
+        sender: user.balance,
+        receiver: 0, // No receiver for debit
+      },
+    });
 
     res.status(200).json({ status: "200", balance: user.balance });
   } catch (error) {
@@ -182,12 +196,26 @@ exports.credit = async (req, res) => {
     const user = await User.findOne({ username });
     if (!user) return handleError(res, "User not found", 404);
 
-    // Add balance
+    // Add balance and track transaction
+    const previousBalance = user.balance;
     user.balance += parseFloat(amount);
     await user.save();
 
-    // Save transaction
-    await Transaction.create({ username, amount, transaction_id, type: "credit" });
+    await Transfer.create({
+      senderId: null, // No sender for credit
+      receiverId: user._id,
+      type: "credit",
+      amount,
+      note: `Credit for transaction ID: ${transaction_id}`,
+      balancesBefore: {
+        sender: 0, // No sender for credit
+        receiver: previousBalance,
+      },
+      balancesAfter: {
+        sender: 0, // No sender for credit
+        receiver: user.balance,
+      },
+    });
 
     res.status(200).json({ status: "200", balance: user.balance });
   } catch (error) {
@@ -203,10 +231,13 @@ exports.rollback = async (req, res) => {
     return handleError(res, "Transaction ID is required", 400);
 
   try {
-    const transaction = await Transaction.findOne({ transaction_id });
+    const transaction = await Transfer.findOne({ note: new RegExp(transaction_id) });
     if (!transaction) return handleError(res, "Transaction not found", 404);
 
-    const user = await User.findOne({ username: transaction.username });
+    const user = transaction.type === "debit" 
+      ? await User.findById(transaction.senderId)
+      : await User.findById(transaction.receiverId);
+
     if (!user) return handleError(res, "User not found", 404);
 
     // Rollback transaction
