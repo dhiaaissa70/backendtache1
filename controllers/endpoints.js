@@ -142,8 +142,8 @@ exports.getGame = async (req, res) => {
       play_for_fun = false,
       lang = "en",
       currency = "EUR",
-      homeurl = "https://catch-me.bet", // Replace with your homepage URL
-      cashierurl = "https://catch-me.bet", // Replace with your cashier page URL
+      homeurl = "https://catch-me.bet",
+      cashierurl = "https://catch-me.bet/cashier",
     } = req.body;
   
     if (!gameid || !username) {
@@ -151,13 +151,13 @@ exports.getGame = async (req, res) => {
     }
   
     try {
-      // Step 1: Check if user exists in your local database
+      // Step 1: Fetch user data from the database
       const user = await User.findOne({ username });
       if (!user) {
         return handleError(res, "User not found in local database", 404);
       }
   
-      // Step 2: Check if the player exists in the provider's system
+      // Step 2: Ensure the player exists in the provider's system
       const playerExistsPayload = {
         api_password: API_PASSWORD,
         api_login: API_USERNAME,
@@ -168,61 +168,52 @@ exports.getGame = async (req, res) => {
   
       const playerExistsResponse = await callProviderAPI(playerExistsPayload);
   
-      if (playerExistsResponse.error !== 0 || !playerExistsResponse.response) {
-        console.log(`[DEBUG] Player does not exist. Attempting to create player: ${username}`);
-  
-        // Step 3: If the player does not exist, create them
+      if (!playerExistsResponse.response) {
+        // Create the player if they don't exist
         const createPlayerPayload = {
           api_password: API_PASSWORD,
           api_login: API_USERNAME,
           method: "createPlayer",
           user_username: username,
-          user_password: "securePassword123", // Use a secure password or hash here
+          user_password: "securePassword123",
           currency,
         };
   
         const createPlayerResponse = await callProviderAPI(createPlayerPayload);
-  
         if (createPlayerResponse.error !== 0) {
           return handleError(
             res,
-            `Failed to create player: ${createPlayerResponse.message || "Unknown error"}`,
+            `Failed to create player: ${createPlayerResponse.message}`,
             400
           );
         }
-  
-        // Save the remote ID locally
-        user.remote_id = createPlayerResponse.response.id;
-        await user.save();
       }
   
-      // Step 4: Fetch the game embed URL
+      // Step 3: Send the getGame request to the provider
       const payload = {
         api_password: API_PASSWORD,
         api_login: API_USERNAME,
         method: "getGame",
         gameid,
         user_username: username,
-        user_password: "securePassword123", // Same password used during player creation
+        user_password: "securePassword123",
         play_for_fun: play_for_fun ? 1 : 0,
         lang,
         currency,
-        homeurl, // Optional: Specify home/back URL
-        cashierurl, // Optional: Specify cashier URL
+        homeurl,
+        cashierurl,
       };
   
       const response = await callProviderAPI(payload);
   
       if (response.error === 0) {
-        const { response: gameUrl, gamesession_id, sessionid } = response;
-  
-        // Step 5: Return game embed URL and session info
-        res.status(200).json({
+        return res.status(200).json({
           success: true,
           data: {
-            gameUrl,
-            gamesession_id,
-            sessionid,
+            gameUrl: response.response,
+            gamesession_id: response.gamesession_id,
+            sessionid: response.sessionid,
+            balance: user.balance.toFixed(2), // Include the player's current balance
           },
         });
       } else {
@@ -234,23 +225,48 @@ exports.getGame = async (req, res) => {
     }
   };
   
+  
 
 // 4. Handle Balance Callback
 exports.getBalance = async (req, res) => {
-  const { remote_id } = req.query;
-
-  if (!remote_id) return handleError(res, "Missing remote_id", 400);
-
-  try {
-    const user = await User.findOne({ remote_id });
-    if (!user) return res.status(404).json({ status: "404", balance: 0, message: "User not found" });
-
-    res.status(200).json({ status: "200", balance: user.balance.toFixed(2) });
-  } catch (error) {
-    console.error("Error in getBalance:", error.message);
-    handleError(res, "Internal server error");
-  }
-};
+    const {
+      remote_id, // Unique player ID in the provider's system
+      session_id,
+      currency,
+      username,
+      game_id_hash,
+      gamesession_id,
+    } = req.query;
+  
+    // Validate required parameters
+    if (!remote_id || !username || !currency) {
+      console.error("[ERROR] Missing required parameters for getBalance.");
+      return res.status(400).json({ status: "400", message: "Missing required parameters." });
+    }
+  
+    try {
+      // Fetch the player from your database using the username or remote_id
+      const player = await User.findOne({ username });
+  
+      if (!player) {
+        console.error(`[ERROR] Player not found for username: ${username}`);
+        return res.status(404).json({ status: "404", message: "Player not found." });
+      }
+  
+      // Return the player's balance from your database
+      return res.status(200).json({
+        status: "200",
+        balance: player.balance.toFixed(2), // Ensure balance is a 2-decimal string
+      });
+    } catch (error) {
+      console.error("[ERROR] Unexpected error in getBalance:", error.message);
+      return res.status(500).json({
+        status: "500",
+        message: "Internal server error. Please try again later.",
+      });
+    }
+  };
+  
 
 // 5. Handle Debit (Bet)
 exports.debit = async (req, res) => {
