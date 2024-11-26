@@ -40,28 +40,27 @@ exports.getlist = async (req, res) => {
         api_password: API_PASSWORD,
         api_login: API_USERNAME,
         method: "getGameList",
-        show_systems: 0,
-        show_additional: false,
+        show_systems: 1, // Enable additional system details
+        show_additional: true, // Include extra metadata
         currency: "EUR",
       };
   
-      console.log("[DEBUG] Fetching game list with payload:", payload);
-  
       // Generate key for secure API communication
-      const key = generateKey(payload);
-      payload.key = key;
+      payload.key = generateKey(payload);
   
+      // Make the API call
       const response = await callProviderAPI(payload);
   
       if (response.error === 0) {
+        // Successfully fetched game list
         res.status(200).json({ success: true, data: response.response });
       } else {
-        console.error("[ERROR] Failed to fetch game list:", response.message || response.error);
-        return handleError(res, "Failed to fetch game list from provider.", 500);
+        console.error("Error fetching game list:", response.message || response.error);
+        res.status(500).json({ success: false, message: "Failed to fetch game list." });
       }
     } catch (error) {
-      console.error("[ERROR] Unexpected error fetching game list:", error.message);
-      handleError(res, "An error occurred while fetching the game list.", 500);
+      console.error("Unexpected error fetching game list:", error);
+      res.status(500).json({ success: false, message: "An internal error occurred." });
     }
   };
   
