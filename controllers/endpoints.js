@@ -1,186 +1,224 @@
 const axios = require("axios");
 const crypto = require("crypto");
 const User = require("../models/User");
+const Transaction = require("../models/Transaction"); // A model to track transactions in your DB
 
-// Load environment variables
 const API_PASSWORD = process.env.API_PASSWORD;
 const API_USERNAME = process.env.API_USERNAME;
 const API_SALT = process.env.API_SALT;
 
 // Helper function to call the provider's API
 async function callProviderAPI(payload) {
-    const url = "https://stage.game-program.com/api/seamless/provider";
-    try {
-        console.log("[DEBUG] Calling Provider API with payload:", payload);
-        const response = await axios.post(url, payload, {
-            headers: { "Content-Type": "application/json" },
-        });
-        console.log("[DEBUG] Provider API Response:", response.data);
-        return response.data;
-    } catch (error) {
-        console.error("[ERROR] Provider API Error:", {
-            method: payload.method,
-            payload,
-            error: error.response?.data || error.message,
-        });
-        throw new Error(
-            `Provider API Error for method ${payload.method}: ${error.response?.data?.message || error.message}`
-        );
-    }
+  const url = "https://stage.game-program.com/api/seamless/provider";
+  try {
+    console.log("Calling Provider API:", payload);
+    const response = await axios.post(url, payload, {
+      headers: { "Content-Type": "application/json" },
+    });
+    console.log("Provider API Response:", response.data);
+    return response.data;
+  } catch (error) {
+    console.error("Provider API Error:", error.response?.data || error.message);
+    throw new Error(
+      error.response?.data?.message || "Error communicating with provider"
+    );
+  }
 }
 
-// Utility function to generate the SHA1 key
-function generateKey(salt, params) {
-    const queryString = new URLSearchParams(params).toString();
-    console.log("[DEBUG] Query String for SHA1 Key:", queryString);
-
-    const sha1Key = crypto.createHash("sha1").update(salt + queryString).digest("hex");
-    console.log("[DEBUG] Generated Key (SHA1):", sha1Key);
-
-    return sha1Key;
+// Utility function to generate SHA1 key
+function generateKey(params) {
+  const queryString = new URLSearchParams(params).toString();
+  return crypto.createHash("sha1").update(API_SALT + queryString).digest("hex");
 }
 
 // Error handler function
-function handleError(res, message, details = null, statusCode = 500) {
-    console.error("[ERROR]", { message, details });
-    res.status(statusCode).json({ success: false, message, details });
+function handleError(res, message, statusCode = 500) {
+  res.status(statusCode).json({ status: statusCode, message });
 }
-// Route to fetch game list
-exports.getlist = async (req, res) => {
-    try {
-        const payload = {
-            api_password: API_PASSWORD,
-            api_login: API_USERNAME,
-            method: "getGameList",
-            show_systems: 0,
-            show_additional: false,
-            currency: "EUR",
-        };
 
-        console.log("[DEBUG] Fetching game list with payload:", payload);
-        const response = await callProviderAPI(payload);
+// 1. Check if player exists
+exports.playerExists = async (req, res) => {
+  const { username } = req.body;
 
-        if (response.error !== 0) {
-            return handleError(
-                res,
-                "Failed to fetch game list from provider.",
-                response,
-                500
-            );
-        }
+  if (!username) return handleError(res, "Username is required", 400);
 
-        res.status(200).json({ success: true, data: response.response });
-    } catch (error) {
-        handleError(res, "Error fetching game list.", error.message);
+  try {
+    const payload = {
+      api_password: API_PASSWORD,
+      api_login: API_USERNAME,
+      method: "playerExists",
+      user_username: username,
+    };
+
+    const response = await callProviderAPI(payload);
+
+    if (response.error === 0 && response.response) {
+      res.status(200).json({ success: true, data: response.response });
+    } else {
+      res.status(404).json({ success: false, message: "Player does not exist" });
     }
+  } catch (error) {
+    handleError(res, error.message);
+  }
 };
-// Route to retrieve game session and synchronize wallet
-exports.getGame = async (req, res) => {
-    try {
-        const { gameid, lang = "en", play_for_fun = false, homeurl, username } = req.body;
 
-        if (!gameid || !username) {
-            return handleError(res, "Invalid gameid or username.", null, 400);
-        }
+// 2. Create player
+exports.createPlayer = async (req, res) => {
+  const { username, password, currency = "EUR" } = req.body;
 
-        console.log("[DEBUG] Retrieving Game Session for User:", username);
+  if (!username || !password)
+    return handleError(res, "Username and password are required", 400);
 
-        // Fetch user
-        const user = await User.findOne({ username });
-        if (!user) return handleError(res, "User not found.", null, 404);
+  try {
+    const payload = {
+      api_password: API_PASSWORD,
+      api_login: API_USERNAME,
+      method: "createPlayer",
+      user_username: username,
+      user_password: password,
+      currency,
+    };
 
-        console.log("[DEBUG] User found. Current balance:", user.balance);
+    const response = await callProviderAPI(payload);
 
-        if (!play_for_fun && user.balance <= 0) {
-            return handleError(res, "Insufficient balance.", null, 400);
-        }
-
-        // Step 1: Login Player
-        const loginPayload = {
-            api_password: API_PASSWORD,
-            api_login: API_USERNAME,
-            method: "loginPlayer",
-            user_username: username,
-            user_password: username,
-            currency: "EUR",
-        };
-
-        console.log("[DEBUG] Login Player Payload:", loginPayload);
-
-        const loginResponse = await callProviderAPI(loginPayload);
-
-        console.log("[DEBUG] Login Player Response:", loginResponse);
-
-        const sessionId = loginResponse.response?.sessionid;
-        if (!sessionId) {
-            return handleError(res, "Provider login failed. Missing session ID.");
-        }
-
-        // Step 2: Get Game Session
-        const gamePayload = {
-            api_password: API_PASSWORD,
-            api_login: API_USERNAME,
-            method: "getGame",
-            gameid,
-            lang,
-            play_for_fun,
-            user_username: username,
-            user_password: username,
-            sessionid: sessionId,
-            homeurl: homeurl || "https://catch-me.bet",
-            currency: "EUR",
-        };
-
-        console.log("[DEBUG] Game Session Payload:", gamePayload);
-
-        const gameResponse = await callProviderAPI(gamePayload);
-
-        console.log("[DEBUG] Game Session Response:", gameResponse);
-
-        const gameUrl = gameResponse.response;
-        const gamesessionId = gameResponse.gamesession_id;
-
-        if (!gameUrl || !gamesessionId) {
-            return handleError(
-                res,
-                "Provider did not return a valid game session or URL.",
-                gameResponse
-            );
-        }
-
-        console.log("[DEBUG] Raw Game URL from Provider:", gameUrl);
-
-        // Generate and append SHA1 `key` for the game URL
-        const keyPayload = {
-            api_password: API_PASSWORD,
-            api_login: API_USERNAME,
-            method: "getGame",
-            gameid,
-            lang,
-            play_for_fun,
-            user_username: username,
-            user_password: username,
-            sessionid: sessionId,
-            homeurl: homeurl || "https://catch-me.bet",
-            currency: "EUR",
-        };
-
-        const generatedKey = generateKey(API_SALT, keyPayload);
-        console.log("[DEBUG] Generated Key (SHA1):", generatedKey);
-
-        const finalGameUrl = `${gameUrl}&key=${generatedKey}`;
-        console.log("[DEBUG] Final Game URL with Key:", finalGameUrl);
-
-        res.status(200).json({
-            success: true,
-            data: {
-                gameUrl: finalGameUrl,
-                gamesessionId,
-                userBalance: user.balance,
-            },
-        });
-    } catch (error) {
-        console.error("[ERROR] Exception in getGame:", error);
-        handleError(res, "Error fetching game URL.", error.message);
+    if (response.error === 0) {
+      res.status(200).json({ success: true, data: response.response });
+    } else {
+      res.status(400).json({ success: false, message: response.message });
     }
+  } catch (error) {
+    handleError(res, error.message);
+  }
+};
+
+// 3. Get Game
+exports.getGame = async (req, res) => {
+  const { gameid, username, play_for_fun = false, lang = "en" } = req.body;
+
+  if (!gameid || !username)
+    return handleError(res, "Game ID and username are required", 400);
+
+  try {
+    const user = await User.findOne({ username });
+    if (!user) return handleError(res, "User not found", 404);
+
+    const payload = {
+      api_password: API_PASSWORD,
+      api_login: API_USERNAME,
+      method: "getGame",
+      gameid,
+      user_username: username,
+      user_password: username,
+      play_for_fun,
+      lang,
+      currency: "EUR",
+    };
+
+    const response = await callProviderAPI(payload);
+
+    if (response.error === 0) {
+      const queryKey = generateKey(payload);
+      const gameUrl = `${response.response}&key=${queryKey}`;
+      res.status(200).json({ success: true, data: { gameUrl } });
+    } else {
+      handleError(res, response.message, 400);
+    }
+  } catch (error) {
+    handleError(res, error.message);
+  }
+};
+
+// 4. Balance Callback
+exports.getBalance = async (req, res) => {
+  const { username } = req.query;
+
+  if (!username) return handleError(res, "Username is required", 400);
+
+  try {
+    const user = await User.findOne({ username });
+    if (!user) return handleError(res, "User not found", 404);
+
+    res.status(200).json({ status: "200", balance: user.balance });
+  } catch (error) {
+    handleError(res, error.message);
+  }
+};
+
+// 5. Debit Callback
+exports.debit = async (req, res) => {
+  const { username, amount, transaction_id } = req.query;
+
+  if (!username || !amount || !transaction_id)
+    return handleError(res, "Invalid parameters", 400);
+
+  try {
+    const user = await User.findOne({ username });
+    if (!user) return handleError(res, "User not found", 404);
+
+    if (user.balance < amount)
+      return res.status(403).json({ status: "403", msg: "Insufficient funds" });
+
+    // Deduct balance
+    user.balance -= parseFloat(amount);
+    await user.save();
+
+    // Save transaction
+    await Transaction.create({ username, amount, transaction_id, type: "debit" });
+
+    res.status(200).json({ status: "200", balance: user.balance });
+  } catch (error) {
+    handleError(res, error.message);
+  }
+};
+
+// 6. Credit Callback
+exports.credit = async (req, res) => {
+  const { username, amount, transaction_id } = req.query;
+
+  if (!username || !amount || !transaction_id)
+    return handleError(res, "Invalid parameters", 400);
+
+  try {
+    const user = await User.findOne({ username });
+    if (!user) return handleError(res, "User not found", 404);
+
+    // Add balance
+    user.balance += parseFloat(amount);
+    await user.save();
+
+    // Save transaction
+    await Transaction.create({ username, amount, transaction_id, type: "credit" });
+
+    res.status(200).json({ status: "200", balance: user.balance });
+  } catch (error) {
+    handleError(res, error.message);
+  }
+};
+
+// 7. Rollback Callback
+exports.rollback = async (req, res) => {
+  const { transaction_id } = req.query;
+
+  if (!transaction_id)
+    return handleError(res, "Transaction ID is required", 400);
+
+  try {
+    const transaction = await Transaction.findOne({ transaction_id });
+    if (!transaction) return handleError(res, "Transaction not found", 404);
+
+    const user = await User.findOne({ username: transaction.username });
+    if (!user) return handleError(res, "User not found", 404);
+
+    // Rollback transaction
+    if (transaction.type === "debit") {
+      user.balance += transaction.amount;
+    } else if (transaction.type === "credit") {
+      user.balance -= transaction.amount;
+    }
+    await user.save();
+
+    res.status(200).json({ status: "200", balance: user.balance });
+  } catch (error) {
+    handleError(res, error.message);
+  }
 };

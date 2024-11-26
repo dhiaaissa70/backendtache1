@@ -2,22 +2,28 @@ const express = require("express");
 const router = express.Router();
 const endpointController = require("../controllers/endpoints"); // Controller containing logic
 
-// Route to retrieve the game list
+// 1. Route to retrieve the game list
 router.post("/getlist", endpointController.getlist); // Fetch list of available games
 
-// Route to retrieve a specific game session
+// 2. Route to retrieve a specific game session
 router.post("/get-game", endpointController.getGame); // Retrieve game launch URL and session
 
-// Route to get user balance
-//router.post("/getUserbalance", endpointController.getuserbalance); // Fetch user balance from provider
+// 3. Route to check if player exists
+router.post("/player-exists", endpointController.playerExists); // Check if player exists in provider's system
 
-// Route to transfer funds to a user
-//router.post("/givemoney", endpointController.giveMoneytoUser); // Send funds to the user
+// 4. Route to create a new player
+router.post("/create-player", endpointController.createPlayer); // Create a new player account
 
-// Route to create a new player
-//router.post("/createplayer", endpointController.createPlayer); // Create a new player account
+// 5. Route to handle balance callback
+router.get("/balance", endpointController.getBalance); // Respond with user balance
 
-// Route to log in an existing player
-//router.post("/loginPlayer", endpointController.loginPlayer); // Log in the user via provider API
+// 6. Route to handle debit (bet) callback
+router.get("/debit", endpointController.debit); // Deduct bet amount from user's balance
+
+// 7. Route to handle credit (win) callback
+router.get("/credit", endpointController.credit); // Add win amount to user's balance
+
+// 8. Route to handle rollback callback
+router.get("/rollback", endpointController.rollback); // Rollback a previous transaction
 
 module.exports = router;
