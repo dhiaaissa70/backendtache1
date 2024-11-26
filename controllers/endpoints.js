@@ -267,10 +267,10 @@ exports.getBalance = async (req, res) => {
       const expectedKey = generateKey(queryParams); // Using your API_SALT
       const incomingKey = req.query.key;
   
-      if (expectedKey !== incomingKey) {
+      /*if (expectedKey !== incomingKey) {
         console.error("[ERROR] Invalid key for balance request.");
         return res.status(200).json({ status: "400", message: "Invalid key." });
-      }
+      }*/
   
       // Step 2: Fetch the player's balance using remote_id
       const player = await User.findOne({ remote_id }); // Ensure remote_id is stored during `createPlayer`.
