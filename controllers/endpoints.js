@@ -38,30 +38,31 @@ function handleError(res, message, statusCode = 500) {
 
 // 1. Check if player exists
 exports.playerExists = async (req, res) => {
-  const { username } = req.body;
-
-  if (!username) return handleError(res, "Username is required", 400);
-
-  try {
-    const payload = {
-      api_password: API_PASSWORD,
-      api_login: API_USERNAME,
-      method: "playerExists",
-      user_username: username,
-    };
-
-    const response = await callProviderAPI(payload);
-
-    if (response.error === 0 && response.response) {
-      res.status(200).json({ success: true, data: response.response });
-    } else {
-      res.status(404).json({ success: false, message: "Player does not exist" });
+    const { username, currency = "EUR" } = req.body; // Default currency to EUR if not provided
+  
+    if (!username) return handleError(res, "Username is required", 400);
+  
+    try {
+      const payload = {
+        api_password: API_PASSWORD,
+        api_login: API_USERNAME,
+        method: "playerExists",
+        user_username: username,
+        currency, // Include currency in the request
+      };
+  
+      const response = await callProviderAPI(payload);
+  
+      if (response.error === 0 && response.response) {
+        res.status(200).json({ success: true, data: response.response });
+      } else {
+        res.status(404).json({ success: false, message: "Player does not exist" });
+      }
+    } catch (error) {
+      handleError(res, error.message);
     }
-  } catch (error) {
-    handleError(res, error.message);
-  }
-};
-
+  };
+  
 // 2. Create player
 exports.createPlayer = async (req, res) => {
   const { username, password, currency = "EUR" } = req.body;
@@ -124,7 +125,7 @@ exports.getlist = async (req, res) => {
 // 3. Get Game
 // 3. Get Game
 exports.getGame = async (req, res) => {
-    const { gameid, username, play_for_fun = false, lang = "en" } = req.body;
+    const { gameid, username, play_for_fun = false, lang = "en", currency = "EUR" } = req.body;
   
     if (!gameid || !username)
       return handleError(res, "Game ID and username are required", 400);
@@ -139,6 +140,7 @@ exports.getGame = async (req, res) => {
         api_login: API_USERNAME,
         method: "playerExists",
         user_username: username,
+        currency, // Add currency field
       };
   
       const playerExistsResponse = await callProviderAPI(playerExistsPayload);
@@ -152,20 +154,24 @@ exports.getGame = async (req, res) => {
           api_login: API_USERNAME,
           method: "createPlayer",
           user_username: username,
-          user_password: username, // Using username as password for simplicity
-          currency: "EUR",
+          user_password: username, // Use username as password (simplified logic)
+          currency, // Add currency field
         };
   
         const createPlayerResponse = await callProviderAPI(createPlayerPayload);
   
         if (createPlayerResponse.error !== 0) {
-          return handleError(
-            res,
-            `Failed to create player: ${createPlayerResponse.message}`,
-            400
-          );
+          // Handle "Player already exists" error gracefully
+          if (createPlayerResponse.message.includes("Player already exists")) {
+            console.log(`[DEBUG] Player already exists in the provider system.`);
+          } else {
+            return handleError(
+              res,
+              `Failed to create player: ${createPlayerResponse.message}`,
+              400
+            );
+          }
         }
-        console.log(`[DEBUG] Player created successfully: ${username}`);
       }
   
       // Step 3: Fetch the game URL
@@ -175,10 +181,10 @@ exports.getGame = async (req, res) => {
         method: "getGame",
         gameid,
         user_username: username,
-        user_password: username, // Using username as password for simplicity
+        user_password: username,
         play_for_fun,
         lang,
-        currency: "EUR",
+        currency,
       };
   
       const response = await callProviderAPI(payload);
@@ -194,6 +200,7 @@ exports.getGame = async (req, res) => {
       handleError(res, error.message);
     }
   };
+  
   
 
 // 4. Balance Callback
