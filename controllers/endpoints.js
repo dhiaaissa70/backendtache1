@@ -242,11 +242,6 @@ exports.getlist = async (req, res) => {
       handleError(res, "An error occurred while fetching the game URL.", 500);
     }
   };
-  
-    
-    
-  
-
 
 // 4. Get Balance
 exports.getBalance = async (req, res) => {

@@ -17,6 +17,9 @@ app.use(express.json());
 app.get('/', (req, res) => {
   res.send('le serveur est en marche');
 });
+
+
+////
 app.use("/tr",TranferRoute)
 app.use("/auth",AuthRoute)
 app.use("/api",EndpointRoute)
