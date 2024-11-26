@@ -31,13 +31,12 @@ async function callProviderAPI(payload) {
 
 // Utility function to generate the SHA1 key
 function generateKey(salt, params) {
-    // Construct the query string (unsorted, as per provider's requirement)
     const queryString = new URLSearchParams(params).toString();
     console.log("[DEBUG] Query String for SHA1 Key:", queryString);
 
-    // Combine the salt and query string, then hash
     const sha1Key = crypto.createHash("sha1").update(salt + queryString).digest("hex");
     console.log("[DEBUG] Generated Key (SHA1):", sha1Key);
+
     return sha1Key;
 }
 
@@ -46,7 +45,6 @@ function handleError(res, message, details = null, statusCode = 500) {
     console.error("[ERROR]", { message, details });
     res.status(statusCode).json({ success: false, message, details });
 }
-
 // Route to fetch game list
 exports.getlist = async (req, res) => {
     try {
@@ -76,7 +74,6 @@ exports.getlist = async (req, res) => {
         handleError(res, "Error fetching game list.", error.message);
     }
 };
-
 // Route to retrieve game session and synchronize wallet
 exports.getGame = async (req, res) => {
     try {
