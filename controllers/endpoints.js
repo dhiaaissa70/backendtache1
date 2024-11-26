@@ -1,13 +1,11 @@
 const axios = require("axios");
 const crypto = require("crypto");
 const User = require("../models/User");
-const GameSession = require("../models/gamesession");
-const { generateTransactionId } = require("../utils/utils"); // Import utilities
 
 // Load environment variables
 const API_PASSWORD = process.env.API_PASSWORD;
 const API_USERNAME = process.env.API_USERNAME;
-const API_SALT = process.env.API_SALT; // Make sure this is defined in your .env file
+const API_SALT = process.env.API_SALT;
 
 // Helper function to call the provider's API
 async function callProviderAPI(payload) {
@@ -33,9 +31,14 @@ async function callProviderAPI(payload) {
 
 // Utility function to generate the SHA1 key
 function generateKey(salt, params) {
-    const queryString = new URLSearchParams(params).toString(); // Converts params to a query string
+    // Construct the query string (unsorted, as per provider's requirement)
+    const queryString = new URLSearchParams(params).toString();
     console.log("[DEBUG] Query String for SHA1 Key:", queryString);
-    return crypto.createHash("sha1").update(salt + queryString).digest("hex");
+
+    // Combine the salt and query string, then hash
+    const sha1Key = crypto.createHash("sha1").update(salt + queryString).digest("hex");
+    console.log("[DEBUG] Generated Key (SHA1):", sha1Key);
+    return sha1Key;
 }
 
 // Error handler function
@@ -83,8 +86,9 @@ exports.getGame = async (req, res) => {
             return handleError(res, "Invalid gameid or username.", null, 400);
         }
 
-        console.log("[DEBUG] Retrieving Game Session...");
+        console.log("[DEBUG] Retrieving Game Session for User:", username);
 
+        // Fetch user
         const user = await User.findOne({ username });
         if (!user) return handleError(res, "User not found.", null, 404);
 
@@ -94,6 +98,7 @@ exports.getGame = async (req, res) => {
             return handleError(res, "Insufficient balance.", null, 400);
         }
 
+        // Step 1: Login Player
         const loginPayload = {
             api_password: API_PASSWORD,
             api_login: API_USERNAME,
@@ -114,6 +119,7 @@ exports.getGame = async (req, res) => {
             return handleError(res, "Provider login failed. Missing session ID.");
         }
 
+        // Step 2: Get Game Session
         const gamePayload = {
             api_password: API_PASSWORD,
             api_login: API_USERNAME,
@@ -147,7 +153,22 @@ exports.getGame = async (req, res) => {
 
         console.log("[DEBUG] Raw Game URL from Provider:", gameUrl);
 
-        const generatedKey = generateKey(API_SALT, gamePayload);
+        // Generate and append SHA1 `key` for the game URL
+        const keyPayload = {
+            api_password: API_PASSWORD,
+            api_login: API_USERNAME,
+            method: "getGame",
+            gameid,
+            lang,
+            play_for_fun,
+            user_username: username,
+            user_password: username,
+            sessionid: sessionId,
+            homeurl: homeurl || "https://catch-me.bet",
+            currency: "EUR",
+        };
+
+        const generatedKey = generateKey(API_SALT, keyPayload);
         console.log("[DEBUG] Generated Key (SHA1):", generatedKey);
 
         const finalGameUrl = `${gameUrl}&key=${generatedKey}`;
@@ -164,83 +185,5 @@ exports.getGame = async (req, res) => {
     } catch (error) {
         console.error("[ERROR] Exception in getGame:", error);
         handleError(res, "Error fetching game URL.", error.message);
-    }
-};
-
-// Get user balance
-exports.getuserbalance = async (req, res) => {
-    try {
-        const { username } = req.body;
-
-        if (!username) {
-            return handleError(res, "Username is required.", null, 400);
-        }
-
-        const payload = {
-            api_password: API_PASSWORD,
-            api_login: API_USERNAME,
-            method: "getPlayerBalance",
-            user_username: username,
-            currency: "EUR",
-        };
-
-        console.log("[DEBUG] Get User Balance Payload:", payload);
-
-        const response = await callProviderAPI(payload);
-
-        if (response.error !== 0) {
-            return handleError(
-                res,
-                "Failed to fetch user balance from the provider.",
-                response,
-                500
-            );
-        }
-
-        res.status(200).json({ success: true, data: response.response });
-    } catch (error) {
-        handleError(res, "Error fetching user balance.", error.message);
-    }
-};
-
-// Create Player
-exports.createPlayer = async (req, res) => {
-    try {
-        const { user_username, user_password, currency = "EUR" } = req.body;
-
-        if (!user_username || !user_password) {
-            return handleError(res, "Username and password are required.", null, 400);
-        }
-
-        const payload = {
-            api_password: API_PASSWORD,
-            api_login: API_USERNAME,
-            method: "createPlayer",
-            user_username,
-            user_password,
-            currency,
-        };
-
-        console.log("[DEBUG] Create Player Payload:", payload);
-
-        const response = await callProviderAPI(payload);
-
-        if (response.error !== 0) {
-            return handleError(
-                res,
-                "Failed to create user via provider.",
-                response,
-                500
-            );
-        }
-
-        res.status(200).json({
-            success: true,
-            message: "User successfully created.",
-            data: response.response,
-        });
-    } catch (error) {
-        console.error("[ERROR] createPlayer Exception:", error);
-        handleError(res, "Error creating user.", error.message);
     }
 };
