@@ -26,4 +26,4 @@ function generateKeys(params) {
     return hash;
 }
 
-module.exports = { generateKey };
+module.exports = { generateKeys };
