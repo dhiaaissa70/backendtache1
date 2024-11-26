@@ -288,43 +288,137 @@ exports.getBalance = async (req, res) => {
 
 // 5. Handle Debit (Bet)
 exports.debit = async (req, res) => {
-  const { remote_id, amount } = req.query;
-
-  if (!remote_id || !amount) return handleError(res, "Missing required parameters", 400);
-
-  try {
-    const user = await User.findOne({ remote_id });
-    if (!user) return res.status(404).json({ status: "404", balance: 0, message: "User not found" });
-
-    user.balance -= parseFloat(amount);
-    await user.save();
-
-    res.status(200).json({ status: "200", balance: user.balance.toFixed(2) });
-  } catch (error) {
-    console.error("Error in debit:", error.message);
-    handleError(res, "Internal server error");
-  }
-};
+    const {
+      username,
+      remote_id,
+      session_id,
+      amount,
+      provider,
+      game_id,
+      transaction_id,
+      round_id,
+      gameplay_final,
+      gamesession_id,
+      currency = "EUR", // Default currency to EUR
+    } = req.query;
+  
+    if (
+      !username ||
+      !remote_id ||
+      !session_id ||
+      !amount ||
+      !provider ||
+      !game_id ||
+      !transaction_id ||
+      !round_id ||
+      !gamesession_id ||
+      !currency
+    ) {
+      return handleError(res, "Missing required parameters", 400);
+    }
+  
+    try {
+      const params = {
+        api_login: API_USERNAME,
+        api_password: API_PASSWORD,
+        method: "debit",
+        action: "debit",
+        remote_id,
+        username,
+        session_id,
+        amount,
+        provider,
+        game_id,
+        transaction_id,
+        round_id,
+        gameplay_final,
+        gamesession_id,
+        currency, // Include currency
+      };
+  
+      params.key = generateKey(params);
+  
+      const response = await callProviderAPI(params);
+  
+      res.status(200).json(response);
+    } catch (error) {
+      console.error("[ERROR] Debit API Error:", error.message);
+      handleError(res, error.message);
+    }
+  };
+  
 
 // 6. Handle Credit (Win)
 exports.credit = async (req, res) => {
-  const { remote_id, amount } = req.query;
-
-  if (!remote_id || !amount) return handleError(res, "Missing required parameters", 400);
-
-  try {
-    const user = await User.findOne({ remote_id });
-    if (!user) return res.status(404).json({ status: "404", balance: 0, message: "User not found" });
-
-    user.balance += parseFloat(amount);
-    await user.save();
-
-    res.status(200).json({ status: "200", balance: user.balance.toFixed(2) });
-  } catch (error) {
-    console.error("Error in credit:", error.message);
-    handleError(res, "Internal server error");
-  }
-};
+    const {
+      username,
+      remote_id,
+      session_id,
+      amount,
+      provider,
+      game_id,
+      game_id_hash,
+      transaction_id,
+      round_id,
+      gameplay_final,
+      is_freeround_bet,
+      jackpot_contribution_in_amount,
+      gamesession_id,
+      currency = "EUR", // Default currency to EUR
+    } = req.query;
+  
+    // Ensure required parameters are provided
+    if (
+      !username ||
+      !remote_id ||
+      !session_id ||
+      !amount ||
+      !provider ||
+      !game_id ||
+      !transaction_id ||
+      !round_id ||
+      !gamesession_id ||
+      !currency // Validate the currency field
+    ) {
+      return handleError(res, "Missing required parameters", 400);
+    }
+  
+    try {
+      // Construct the payload
+      const params = {
+        api_login: API_USERNAME,
+        api_password: API_PASSWORD,
+        method: "credit",
+        action: "credit",
+        remote_id,
+        username,
+        session_id,
+        amount,
+        provider,
+        game_id,
+        transaction_id,
+        round_id,
+        gameplay_final,
+        is_freeround_bet,
+        jackpot_contribution_in_amount,
+        gamesession_id,
+        currency, // Ensure currency is included
+      };
+  
+      // Add the validation key
+      params.key = generateKey(params);
+  
+      // Call the provider API
+      const response = await callProviderAPI(params);
+  
+      // Return the response from the provider
+      res.status(200).json(response);
+    } catch (error) {
+      console.error("[ERROR] Credit API Error:", error.message);
+      handleError(res, error.message);
+    }
+  };
+  
 
 // 7. Handle Rollback
 exports.rollback = async (req, res) => {
