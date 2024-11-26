@@ -1,49 +1,21 @@
 const express = require("express");
 const router = express.Router();
-const endpointController = require("../controllers/endpoints"); // Controller containing logic
+const endpointController = require("../controllers/endpoints");
 
-// 1. Route to retrieve the game list
-router.post("/getlist", endpointController.getlist); // Fetch list of available games
+// Game List
+router.post("/getlist", endpointController.getlist);
 
-// 2. Route to retrieve a specific game session
-router.post("/get-game", endpointController.getGame); // Retrieve game launch URL and session
+// Player Management
+router.post("/player-exists", endpointController.playerExists);
+router.post("/create-player", endpointController.createPlayer);
 
-// 3. Route to check if player exists
-router.post("/player-exists", endpointController.playerExists); // Check if player exists in provider's system
+// Game Session Management
+router.post("/get-game", endpointController.getGame);
 
-// 4. Route to create a new player
-router.post("/create-player", endpointController.createPlayer); // Create a new player account
-
-// 5. Route to handle balance callback
-router.get("/balance", endpointController.getBalance); // Respond with user balance
-
-
-
-router.get('/', (req, res) => {
-
-const {action }= req.query;
-
-
-if (action === "balance") {
-
-     return endpointController.getBalance(req,res);
-}
-
-return " missing";
-
-}
-
-
-
-);
-
-// 6. Route to handle debit (bet) callback
-router.get("/debit", endpointController.debit); // Deduct bet amount from user's balance
-
-// 7. Route to handle credit (win) callback
-router.get("/credit", endpointController.credit); // Add win amount to user's balance
-
-// 8. Route to handle rollback callback
-router.get("/rollback", endpointController.rollback); // Rollback a previous transaction
+// Callback Handlers
+router.get("/balance", endpointController.getBalance);
+router.get("/debit", endpointController.debit);
+router.get("/credit", endpointController.credit);
+router.get("/rollback", endpointController.rollback);
 
 module.exports = router;
