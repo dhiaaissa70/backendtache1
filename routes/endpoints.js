@@ -21,10 +21,12 @@ router.get("/balance", endpointController.getBalance); // Respond with user bala
 
 router.get('/', (req, res) => {
 
+const {action }= req.query;
+
 
 if (action === "balance") {
 
-     return getBalance(req,res);
+     return endpointController.getBalance(req,res);
 }
 
 return " missing";
