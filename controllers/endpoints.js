@@ -91,6 +91,36 @@ exports.createPlayer = async (req, res) => {
   }
 };
 
+// Route to fetch game list
+exports.getlist = async (req, res) => {
+    try {
+        const payload = {
+            api_password: API_PASSWORD,
+            api_login: API_USERNAME,
+            method: "getGameList",
+            show_systems: 0,
+            show_additional: false,
+            currency: "EUR",
+        };
+
+        console.log("[DEBUG] Fetching game list with payload:", payload);
+        const response = await callProviderAPI(payload);
+
+        if (response.error !== 0) {
+            return handleError(
+                res,
+                "Failed to fetch game list from provider.",
+                response,
+                500
+            );
+        }
+
+        res.status(200).json({ success: true, data: response.response });
+    } catch (error) {
+        handleError(res, "Error fetching game list.", error.message);
+    }
+};
+
 // 3. Get Game
 exports.getGame = async (req, res) => {
   const { gameid, username, play_for_fun = false, lang = "en" } = req.body;
