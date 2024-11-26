@@ -1,488 +1,144 @@
 const axios = require("axios");
 const crypto = require("crypto");
 const User = require("../models/User");
-const Transfer = require("../models/transfer");
 
-const API_PASSWORD = process.env.API_PASSWORD;
-const API_USERNAME = process.env.API_USERNAME;
-const API_SALT = process.env.API_SALT;
-const BASE_URL = "https://stage.game-program.com/api/seamless/provider" // The base provider URL (e.g., {{urlstage}})
+// Ensure environment variables are available
+const API_PASSWORD = process.env.API_PASSWORD || "default_password";
+const API_USERNAME = process.env.API_USERNAME || "default_username";
+const API_SALT = process.env.API_SALT || "default_salt";
+const BASE_URL = process.env.BASE_URL || "https://stage.game-program.com/api/seamless/provider";
 
-// Helper function to generate SHA1 key
+// Helper function to call Provider API
 async function callProviderAPI(payload) {
-    const url = `${BASE_URL}?${new URLSearchParams(payload).toString()}`;
-    console.log("Calling Provider API with URL:", url);
-    try {
-      const response = await axios.get(url, {
-        headers: { "Content-Type": "application/json" },
-      });
-      console.log("Provider API Response:", response.data);
-      return response.data;
-    } catch (error) {
-      console.error("Provider API Error:", error.response?.data || error.message);
-      throw new Error(
-        error.response?.data?.message || "Error communicating with provider"
-      );
-    }
-  }
-  
-  
-  // Utility function to generate SHA1 key
-  function generateKey(params) {
-    const queryString = new URLSearchParams(params).toString();
-    console.log("[DEBUG] String for SHA1:", `${API_SALT}${queryString}`);
-    return crypto.createHash("sha1").update(`${API_SALT}${queryString}`).digest("hex");
-  }
-  
-  
-  // Error handler function
-  function handleError(res, message, statusCode = 500) {
-    res.status(statusCode).json({ status: statusCode, message });
-  }
-  
-  // 1. Check if player exists
-  exports.playerExists = async (req, res) => {
-      const { username, currency = "EUR" } = req.body; // Default currency to EUR if not provided
-    
-      if (!username) return handleError(res, "Username is required", 400);
-    
-      try {
-        const payload = {
-          api_password: API_PASSWORD,
-          api_login: API_USERNAME,
-          method: "playerExists",
-          user_username: username,
-          currency, // Include currency in the request
-        };
-    
-        const response = await callProviderAPI(payload);
-    
-        if (response.error === 0 && response.response) {
-          res.status(200).json({ success: true, data: response.response });
-        } else {
-          res.status(404).json({ success: false, message: "Player does not exist" });
-        }
-      } catch (error) {
-        handleError(res, error.message);
-      }
-    };
-    
-  // 2. Create player
-  exports.createPlayer = async (req, res) => {
-    const { username, password, currency = "EUR" } = req.body;
-  
-    if (!username || !password)
-      return handleError(res, "Username and password are required", 400);
-  
-    try {
-      const payload = {
-        api_password: API_PASSWORD,
-        api_login: API_USERNAME,
-        method: "createPlayer",
-        user_username: username,
-        user_password: password,
-        currency,
-      };
-  
-      const response = await callProviderAPI(payload);
-  
-      if (response.error === 0) {
-        res.status(200).json({ success: true, data: response.response });
-      } else {
-        res.status(400).json({ success: false, message: response.message });
-      }
-    } catch (error) {
-      handleError(res, error.message);
-    }
-  };
-  
+  const url = `${BASE_URL}?${new URLSearchParams(payload).toString()}`;
+  console.log("[DEBUG] Calling Provider API with URL:", url);
 
- // Route to fetch game list
+  try {
+    const response = await axios.get(url, {
+      headers: { "Content-Type": "application/json" },
+    });
+    console.log("[DEBUG] Provider API Response:", response.data);
+    return response.data;
+  } catch (error) {
+    console.error("[ERROR] Provider API Error:", error.response?.data || error.message);
+    throw new Error(
+      error.response?.data?.message || "Error communicating with provider"
+    );
+  }
+}
+
+// Helper to generate SHA1 key
+function generateKey(params) {
+  const queryString = new URLSearchParams(params).toString();
+  const rawString = `${API_SALT}${queryString}`;
+  console.log("[DEBUG] Generating Key with String:", rawString);
+  return crypto.createHash("sha1").update(rawString).digest("hex");
+}
+
+// Error handler
+function handleError(res, message, statusCode = 500) {
+  console.error(`[ERROR] ${message}`);
+  res.status(statusCode).json({ status: statusCode, message });
+}
+
+// Route: Fetch Game List
 exports.getlist = async (req, res) => {
-    const { show_systems = 0, show_additional = false, currency = "EUR" } = req.query;
-  
-    try {
-      // Validate and normalize input
-      const normalizedShowSystems = show_systems == 1 ? 1 : 0; // Only accept 0 or 1
-      const normalizedShowAdditional = show_additional === "true" || show_additional === true; // Accept boolean or "true"
-  
-      const payload = {
-        api_password: API_PASSWORD,
-        api_login: API_USERNAME,
-        method: "getGameList",
-        show_systems: normalizedShowSystems,
-        show_additional: normalizedShowAdditional,
-        currency,
-      };
-  
-      console.log("[DEBUG] Fetching game list with payload:", payload);
-  
-      // Call Provider API
-      const response = await callProviderAPI(payload);
-  
-      if (response.error !== 0) {
-        // Handle provider-side errors
-        console.error(`[ERROR] Failed to fetch game list. Details:`, response);
-        return handleError(
-          res,
-          `Failed to fetch game list from provider: ${response.message || "Unknown error"}`,
-          500
-        );
-      }
-  
-      // Successful Response
-      console.log("[DEBUG] Game list fetched successfully:", response.response);
-      res.status(200).json({ success: true, data: response.response });
-    } catch (error) {
-      // Handle unexpected errors
-      console.error("[ERROR] Unexpected error fetching game list:", error.message);
-      handleError(res, "Error fetching game list.", 500);
-    }
-  };
-  
-  
+  const { show_systems = 0, show_additional = false, currency = "EUR" } = req.query;
 
-  // 3. Get Game
-  exports.getGame = async (req, res) => {
-    const {
+  try {
+    const payload = {
+      api_password: API_PASSWORD,
+      api_login: API_USERNAME,
+      method: "getGameList",
+      show_systems: show_systems == 1 ? 1 : 0,
+      show_additional: show_additional === "true" || show_additional === true,
+      currency,
+    };
+
+    console.log("[DEBUG] Fetching game list with payload:", payload);
+    const response = await callProviderAPI(payload);
+
+    if (response.error !== 0) {
+      console.error("[ERROR] Provider returned error:", response.message);
+      return handleError(res, `Failed to fetch game list: ${response.message}`, 500);
+    }
+
+    res.status(200).json({ success: true, data: response.response });
+  } catch (error) {
+    console.error("[ERROR] Unexpected error in getlist:", error.message);
+    handleError(res, "Failed to fetch game list.", 500);
+  }
+};
+
+// Route: Fetch Game URL
+exports.getGame = async (req, res) => {
+  const { gameid, username, play_for_fun = false, lang = "en", currency = "EUR" } = req.body;
+
+  if (!gameid || !username) {
+    return handleError(res, "Game ID and username are required.", 400);
+  }
+
+  try {
+    const payload = {
+      api_password: API_PASSWORD,
+      api_login: API_USERNAME,
+      method: "getGame",
       gameid,
-      username,
-      play_for_fun = false,
-      lang = "en",
-      currency = "EUR",
-      homeurl = "https://catch-me.bet", // Replace with your homepage URL
-      cashierurl = "https://catch-me.bet", // Replace with your cashier page URL
-    } = req.body;
-  
-    if (!gameid || !username) {
-      return handleError(res, "Game ID and username are required", 400);
-    }
-  
-    try {
-      // Step 1: Check if user exists in the local database
-      const user = await User.findOne({ username });
-      if (!user) {
-        return handleError(res, "User not found in local database", 404);
-      }
-  
-      // Step 2: Check if the player exists in the provider's system
-      const playerExistsPayload = {
-        api_password: API_PASSWORD,
-        api_login: API_USERNAME,
-        method: "playerExists",
-        user_username: username,
-        currency, // Include currency field
-      };
-  
-      const playerExistsResponse = await callProviderAPI(playerExistsPayload);
-  
-      if (playerExistsResponse.error !== 0) {
-        console.log(`[DEBUG] Player does not exist. Attempting to create player: ${username}`);
-  
-        // Step 3: Create the player if they don't exist
-        const createPlayerPayload = {
-          api_password: API_PASSWORD,
-          api_login: API_USERNAME,
-          method: "createPlayer",
-          user_username: username,
-          user_password: username, // Use username as password (only for simplicity in dev/testing)
-          currency,
-        };
-  
-        const createPlayerResponse = await callProviderAPI(createPlayerPayload);
-  
-        if (createPlayerResponse.error !== 0) {
-          if (createPlayerResponse.message.includes("Player already exists")) {
-            console.log(`[DEBUG] Player already exists in the provider system.`);
-          } else {
-            return handleError(
-              res,
-              `Failed to create player: ${createPlayerResponse.message}`,
-              400
-            );
-          }
-        }
-      }
-  
-      // Step 4: Fetch the game URL
-      const payload = {
-        api_password: API_PASSWORD,
-        api_login: API_USERNAME,
-        method: "getGame",
-        gameid,
-        user_username: username,
-        user_password: username,
-        play_for_fun: !!play_for_fun, // Ensure boolean
-        lang,
-        currency,
-        homeurl, // Optional Home URL
-        cashierurl, // Optional Cashier URL
-      };
-  
-      const response = await callProviderAPI(payload);
-  
-      if (response.error === 0) {
-        const queryKey = generateKey(payload);
-        const gameUrl = `${response.response}&key=${queryKey}`;
-  
-        // Provide game session tracking details (optional for debug)
-        const { gamesession_id, sessionid } = response;
-        console.log(`[DEBUG] Game session: ${gamesession_id}, Player session: ${sessionid}`);
-  
-        res.status(200).json({
-          success: true,
-          data: {
-            gameUrl,
-            gamesession_id,
-            sessionid,
-          },
-        });
-      } else {
-        handleError(res, response.message || "Failed to fetch game URL", 400);
-      }
-    } catch (error) {
-      console.error(`[ERROR] Unexpected error in getGame: ${error.message}`);
-      handleError(res, "An error occurred while fetching the game URL.", 500);
-    }
-  };
+      user_username: username,
+      user_password: username, // Simplified logic
+      play_for_fun,
+      lang,
+      currency,
+      homeurl: "https://catch-me.bet", // Adjust to your home URL
+    };
 
-// 4. Get Balance
-// Updated getBalance route
+    console.log("[DEBUG] Fetching game with payload:", payload);
+    const response = await callProviderAPI(payload);
+
+    if (response.error === 0) {
+      const queryKey = generateKey(payload);
+      const gameUrl = `${response.response}&key=${queryKey}`;
+      res.status(200).json({ success: true, data: { gameUrl } });
+    } else {
+      handleError(res, `Failed to fetch game URL: ${response.message}`, 400);
+    }
+  } catch (error) {
+    handleError(res, "Unexpected error occurred in getGame.", 500);
+  }
+};
+
+// Route: Fetch Balance
 exports.getBalance = async (req, res) => {
-    const { remote_id, session_id, currency, username, game_id_hash, gamesession_id } = req.query;
-  
-    // Validate required parameters
-    if (!remote_id || !username || !currency || !session_id || !game_id_hash) {
-      console.error("[ERROR] Missing required parameters for getBalance.");
-      return res.status(200).json({ status: "400", message: "Missing required parameters." });
+  const { remote_id, username, session_id, currency = "EUR", game_id_hash } = req.query;
+
+  if (!remote_id || !username || !currency) {
+    return handleError(res, "Missing required parameters for balance.", 400);
+  }
+
+  try {
+    const payload = {
+      action: "balance",
+      callerId: API_USERNAME,
+      callerPassword: API_PASSWORD,
+      callerPrefix: "700ha",
+      remote_id,
+      username,
+      session_id,
+      currency,
+      game_id_hash,
+    };
+
+    payload.key = generateKey(payload);
+    console.log("[DEBUG] Balance payload:", payload);
+
+    const response = await callProviderAPI(payload);
+
+    if (response.error === 0) {
+      res.status(200).json({ status: "200", balance: response.balance || "0.00" });
+    } else {
+      handleError(res, `Failed to fetch balance: ${response.message}`, 500);
     }
-  
-    try {
-      // Prepare query parameters
-      const params = {
-        action: "balance",
-        callerId: API_USERNAME,
-        callerPassword: API_PASSWORD,
-        callerPrefix: "700ha", // Update prefix if needed
-        remote_id,
-        username,
-        session_id,
-        currency,
-        provider: "lg", // Example: Replace with your provider
-        game_id_hash,
-        gamesession_id,
-      };
-  
-      // Generate SHA1 key
-      const key = generateKey(params);
-      params.key = key;
-  
-      console.log("[DEBUG] Balance API Query Params:", params);
-  
-      // Call Provider API
-      const response = await callProviderAPI(params);
-  
-      if (response.error === 0) {
-        return res.status(200).json({ status: "200", balance: response.balance || "0.00" });
-      } else {
-        console.error("[ERROR] Provider API Error:", response);
-        return res.status(200).json({ status: "500", message: response.message || "Balance error" });
-      }
-    } catch (error) {
-      console.error("[ERROR] Unexpected error in getBalance:", error.message);
-      return res.status(500).json({
-        status: "500",
-        message: "Internal server error. Please try again later.",
-      });
-    }
-  };
-  
-  
-
-// 5. Debit (Bet)
-exports.debit = async (req, res) => {
-  const {
-    username,
-    remote_id,
-    session_id,
-    amount,
-    provider,
-    game_id,
-    game_id_hash,
-    transaction_id,
-    round_id,
-    gameplay_final,
-    is_freeround_bet,
-    jackpot_contribution_in_amount,
-    gamesession_id,
-  } = req.query;
-
-  if (
-    !username ||
-    !remote_id ||
-    !session_id ||
-    !amount ||
-    !provider ||
-    !game_id ||
-    !game_id_hash ||
-    !transaction_id ||
-    !round_id ||
-    !gamesession_id
-  ) {
-    return handleError(res, "Missing required parameters", 400);
-  }
-
-  try {
-    const params = {
-      callerId: API_USERNAME,
-      callerPassword: API_PASSWORD,
-      callerPrefix: "700ha",
-      action: "debit",
-      remote_id,
-      username,
-      session_id,
-      amount,
-      provider,
-      game_id,
-      game_id_hash,
-      transaction_id,
-      round_id,
-      gameplay_final,
-      is_freeround_bet,
-      jackpot_contribution_in_amount,
-      gamesession_id,
-    };
-
-    const key = generateKey(params);
-    params.key = key;
-
-    const response = await callProviderAPI(params);
-    res.status(200).json(response);
   } catch (error) {
-    handleError(res, error.message);
-  }
-};
-
-// 6. Credit (Win)
-exports.credit = async (req, res) => {
-  const {
-    username,
-    remote_id,
-    session_id,
-    amount,
-    provider,
-    game_id,
-    game_id_hash,
-    transaction_id,
-    round_id,
-    gameplay_final,
-    is_freeround_bet,
-    jackpot_contribution_in_amount,
-    gamesession_id,
-  } = req.query;
-
-  if (
-    !username ||
-    !remote_id ||
-    !session_id ||
-    !amount ||
-    !provider ||
-    !game_id ||
-    !game_id_hash ||
-    !transaction_id ||
-    !round_id ||
-    !gamesession_id
-  ) {
-    return handleError(res, "Missing required parameters", 400);
-  }
-
-  try {
-    const params = {
-      callerId: API_USERNAME,
-      callerPassword: API_PASSWORD,
-      callerPrefix: "700ha",
-      action: "credit",
-      remote_id,
-      username,
-      session_id,
-      amount,
-      provider,
-      game_id,
-      game_id_hash,
-      transaction_id,
-      round_id,
-      gameplay_final,
-      is_freeround_bet,
-      jackpot_contribution_in_amount,
-      gamesession_id,
-    };
-
-    const key = generateKey(params);
-    params.key = key;
-
-    const response = await callProviderAPI(params);
-    res.status(200).json(response);
-  } catch (error) {
-    handleError(res, error.message);
-  }
-};
-
-// 7. Rollback
-exports.rollback = async (req, res) => {
-  const {
-    username,
-    remote_id,
-    session_id,
-    amount,
-    provider,
-    game_id,
-    game_id_hash,
-    transaction_id,
-    round_id,
-    gameplay_final,
-    gamesession_id,
-  } = req.query;
-
-  if (
-    !username ||
-    !remote_id ||
-    !session_id ||
-    !amount ||
-    !provider ||
-    !game_id ||
-    !game_id_hash ||
-    !transaction_id ||
-    !round_id ||
-    !gamesession_id
-  ) {
-    return handleError(res, "Missing required parameters", 400);
-  }
-
-  try {
-    const params = {
-      callerId: API_USERNAME,
-      callerPassword: API_PASSWORD,
-      callerPrefix: "700ha",
-      action: "rollback",
-      remote_id,
-      username,
-      session_id,
-      amount,
-      provider,
-      game_id,
-      game_id_hash,
-      transaction_id,
-      round_id,
-      gameplay_final,
-      gamesession_id,
-    };
-
-    const key = generateKey(params);
-    params.key = key;
-
-    const response = await callProviderAPI(params);
-    res.status(200).json(response);
-  } catch (error) {
-    handleError(res, error.message);
+    handleError(res, "Unexpected error occurred in getBalance.", 500);
   }
 };
