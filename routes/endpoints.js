@@ -17,12 +17,14 @@ router.post("/create-player", endpointController.createPlayer); // Create a new 
 // 5. Route to handle balance callback
 router.get("/balance", endpointController.getBalance); // Respond with user balance
 
+
+
 router.get('/', (req, res) => {
 
 
 if (action === "balance") {
 
-     getBalance(req,res);
+     return getBalance(req,res);
 }
 
 return " missing";
