@@ -221,44 +221,45 @@ exports.getBalance = async (req, res) => {
 
 // 5. Debit Callback
 exports.debit = async (req, res) => {
-  const { username, amount, transaction_id } = req.query;
-
-  if (!username || !amount || !transaction_id)
-    return handleError(res, "Invalid parameters", 400);
-
-  try {
-    const user = await User.findOne({ username });
-    if (!user) return handleError(res, "User not found", 404);
-
-    if (user.balance < amount)
-      return res.status(403).json({ status: "403", msg: "Insufficient funds" });
-
-    // Deduct balance and track transaction
-    const previousBalance = user.balance;
-    user.balance -= parseFloat(amount);
-    await user.save();
-
-    await Transfer.create({
-      senderId: user._id,
-      receiverId: null,
-      type: "debit",
-      amount,
-      note: `Debit for transaction ID: ${transaction_id}`,
-      balancesBefore: {
-        sender: previousBalance,
-        receiver: 0, // No receiver for debit
-      },
-      balancesAfter: {
-        sender: user.balance,
-        receiver: 0, // No receiver for debit
-      },
-    });
-
-    res.status(200).json({ status: "200", balance: user.balance });
-  } catch (error) {
-    handleError(res, error.message);
-  }
-};
+    const { username, amount, transaction_id } = req.query;
+  
+    if (!username || !amount || !transaction_id)
+      return handleError(res, "Invalid parameters", 400);
+  
+    try {
+      const user = await User.findOne({ username });
+      if (!user) return handleError(res, "User not found", 404);
+  
+      if (user.balance < amount)
+        return res.status(403).json({ status: "403", msg: "Insufficient funds" });
+  
+      // Deduct balance and track transaction
+      const previousBalance = user.balance;
+      user.balance -= parseFloat(amount);
+      await user.save();
+  
+      await Transfer.create({
+        senderId: user._id, // User initiating the debit
+        receiverId: null, // No receiver for debit
+        type: "debit", // Ensure 'debit' is added to the schema's enum
+        amount: parseFloat(amount),
+        note: `Debit for transaction ID: ${transaction_id}`,
+        balanceBefore: {
+          sender: previousBalance,
+          receiver: 0, // No receiver for debit
+        },
+        balanceAfter: {
+          sender: user.balance,
+          receiver: 0, // No receiver for debit
+        },
+      });
+  
+      res.status(200).json({ status: "200", balance: user.balance });
+    } catch (error) {
+      handleError(res, error.message);
+    }
+  };
+  
 
 // 6. Credit Callback
 exports.credit = async (req, res) => {

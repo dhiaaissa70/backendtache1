@@ -13,7 +13,7 @@ const TransferSchema = new mongoose.Schema({
     },
     type: {
         type: String,
-        enum: ['deposit', 'withdraw'], 
+        enum: ['deposit', 'withdraw', 'debit', 'credit'], // Include debit and credit
         required: true
     },
     amount: {
