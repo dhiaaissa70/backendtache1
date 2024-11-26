@@ -221,40 +221,62 @@ exports.getBalance = async (req, res) => {
 
 // 5. Debit Callback
 exports.debit = async (req, res) => {
-    const { username, amount, transaction_id } = req.query;
+    const { username, receiverId, amount, transaction_id } = req.query;
   
-    if (!username || !amount || !transaction_id)
-      return handleError(res, "Invalid parameters", 400);
+    // Validate input
+    if (!username || !receiverId || !amount || !transaction_id) {
+      return handleError(res, "Invalid parameters. Ensure username, receiverId, amount, and transaction_id are provided.", 400);
+    }
   
     try {
-      const user = await User.findOne({ username });
-      if (!user) return handleError(res, "User not found", 404);
+      // Fetch sender (username) and receiver (receiverId) details
+      const sender = await User.findOne({ username });
+      const receiver = await User.findById(receiverId);
   
-      if (user.balance < amount)
+      if (!sender) return handleError(res, "Sender not found", 404);
+      if (!receiver) return handleError(res, "Receiver not found", 404);
+  
+      // Ensure sender has sufficient balance
+      if (sender.balance < amount) {
         return res.status(403).json({ status: "403", msg: "Insufficient funds" });
+      }
   
-      // Deduct balance and track transaction
-      const previousBalance = user.balance;
-      user.balance -= parseFloat(amount);
-      await user.save();
+      // Store balances before the transaction
+      const senderBalanceBefore = sender.balance;
+      const receiverBalanceBefore = receiver.balance;
   
+      // Deduct balance from sender and add to receiver
+      sender.balance -= parseFloat(amount);
+      receiver.balance += parseFloat(amount);
+  
+      // Save updated balances
+      await sender.save();
+      await receiver.save();
+  
+      // Log the transfer
       await Transfer.create({
-        senderId: user._id, // User initiating the debit
-        receiverId: null, // No receiver for debit
-        type: "debit", // Ensure 'debit' is added to the schema's enum
+        senderId: sender._id, // Sender's ID
+        receiverId: receiver._id, // Receiver's ID
+        type: "debit", // Transaction type
         amount: parseFloat(amount),
-        note: `Debit for transaction ID: ${transaction_id}`,
+        note: `Transfer from ${sender.username} to ${receiver.username} for transaction ID: ${transaction_id}`,
         balanceBefore: {
-          sender: previousBalance,
-          receiver: 0, // No receiver for debit
+          sender: senderBalanceBefore,
+          receiver: receiverBalanceBefore,
         },
         balanceAfter: {
-          sender: user.balance,
-          receiver: 0, // No receiver for debit
+          sender: sender.balance,
+          receiver: receiver.balance,
         },
       });
   
-      res.status(200).json({ status: "200", balance: user.balance });
+      // Respond with the updated balances
+      res.status(200).json({
+        status: "200",
+        message: `Transfer successful: ${amount} transferred from ${sender.username} to ${receiver.username}`,
+        senderBalance: sender.balance,
+        receiverBalance: receiver.balance,
+      });
     } catch (error) {
       handleError(res, error.message);
     }
