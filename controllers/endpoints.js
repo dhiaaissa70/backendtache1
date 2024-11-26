@@ -1,7 +1,6 @@
 const axios = require("axios");
 const crypto = require("crypto");
 const User = require("../models/User"); // User model for DB operations
-const { generateKeys } = require("../utils/utils"); // Ensure the generateKey function is available
 
 // Load API configuration
 const API_PASSWORD = process.env.API_PASSWORD;
@@ -29,6 +28,23 @@ async function callProviderAPI(payload) {
 // Utility: Handle errors
 function handleError(res, message, statusCode = 500) {
   res.status(statusCode).json({ status: statusCode, message });
+}
+
+
+function generateKeys(params) {
+    const sortedParams = Object.keys(params)
+        .sort() // Ensure the keys are sorted alphabetically
+        .reduce((acc, key) => {
+            if (params[key] !== undefined && params[key] !== null) {
+                acc[key] = params[key]; // Include only defined parameters
+            }
+            return acc;
+        }, {});
+
+    const queryString = new URLSearchParams(sortedParams).toString();
+
+    // Hash the sorted query string with the API_SALT
+    return crypto.createHash("sha1").update(process.env.API_SALT + queryString).digest("hex");
 }
 
 // 1. Get Game List
