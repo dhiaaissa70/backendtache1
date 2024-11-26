@@ -15,19 +15,22 @@ function generateKey(params) {
 
 // Utility: Call Provider API
 async function callProviderAPI(payload) {
-  const url = "https://stage.game-program.com/api/seamless/provider";
-  try {
-    console.log("Calling Provider API with payload:", payload);
-    const response = await axios.post(url, payload, {
-      headers: { "Content-Type": "application/json" },
-    });
-    console.log("Provider API Response:", response.data);
-    return response.data;
-  } catch (error) {
-    console.error("Provider API Error:", error.response?.data || error.message);
-    throw new Error(error.response?.data?.message || "Error communicating with provider");
-  }
+    const url = "https://stage.game-program.com/api/seamless/provider";
+    try {
+        console.log("Payload Sent to Provider:", JSON.stringify(payload, null, 2)); // Log the payload
+        const response = await axios.post(url, payload, {
+            headers: { "Content-Type": "application/json" },
+        });
+        console.log("Provider API Response:", response.data);
+        return response.data;
+    } catch (error) {
+        console.error("Provider API Error:", error.response?.data || error.message);
+        throw new Error(
+            error.response?.data?.message || "Error communicating with provider"
+        );
+    }
 }
+
 
 // Utility: Handle errors
 function handleError(res, message, statusCode = 500) {
@@ -351,73 +354,70 @@ exports.debit = async (req, res) => {
 // 6. Handle Credit (Win)
 exports.credit = async (req, res) => {
     const {
-      username,
-      remote_id,
-      session_id,
-      amount,
-      provider,
-      game_id,
-      game_id_hash,
-      transaction_id,
-      round_id,
-      gameplay_final,
-      is_freeround_bet,
-      jackpot_contribution_in_amount,
-      gamesession_id,
-      currency = "EUR", // Default currency to EUR
-    } = req.query;
-  
-    // Ensure required parameters are provided
-    if (
-      !username ||
-      !remote_id ||
-      !session_id ||
-      !amount ||
-      !provider ||
-      !game_id ||
-      !transaction_id ||
-      !round_id ||
-      !gamesession_id ||
-      !currency // Validate the currency field
-    ) {
-      return handleError(res, "Missing required parameters", 400);
-    }
-  
-    try {
-      // Construct the payload
-      const params = {
-        api_login: API_USERNAME,
-        api_password: API_PASSWORD,
-        method: "credit",
-        action: "credit",
-        remote_id,
         username,
+        remote_id,
         session_id,
         amount,
         provider,
         game_id,
+        game_id_hash,
         transaction_id,
         round_id,
         gameplay_final,
         is_freeround_bet,
         jackpot_contribution_in_amount,
         gamesession_id,
-        currency, // Ensure currency is included
-      };
-  
-      // Add the validation key
-      params.key = generateKey(params);
-  
-      // Call the provider API
-      const response = await callProviderAPI(params);
-  
-      // Return the response from the provider
-      res.status(200).json(response);
-    } catch (error) {
-      console.error("[ERROR] Credit API Error:", error.message);
-      handleError(res, error.message);
+        currency = "EUR", // Default currency
+    } = req.query;
+
+    if (
+        !username ||
+        !remote_id ||
+        !session_id ||
+        !amount ||
+        !provider ||
+        !game_id ||
+        !transaction_id ||
+        !round_id ||
+        !gamesession_id ||
+        !currency // Validate currency field
+    ) {
+        return res.status(400).json({ status: 400, message: "Missing required parameters" });
     }
-  };
+
+    try {
+        const params = {
+            api_login: API_USERNAME,
+            api_password: API_PASSWORD,
+            method: "credit",
+            action: "credit",
+            remote_id,
+            username,
+            session_id,
+            amount,
+            provider,
+            game_id,
+            transaction_id,
+            round_id,
+            gameplay_final,
+            is_freeround_bet,
+            jackpot_contribution_in_amount,
+            gamesession_id,
+            currency, // Include currency field
+        };
+
+        params.key = generateKey(params); // Add the validation key
+
+        console.log("Payload Sent to Provider:", JSON.stringify(params, null, 2)); // Log payload
+
+        const response = await callProviderAPI(params);
+        res.status(200).json(response);
+    } catch (error) {
+        console.error("[ERROR] Credit API Error:", error.message);
+        res.status(500).json({ status: 500, message: error.message });
+    }
+};
+
   
 
 // 7. Handle Rollback
