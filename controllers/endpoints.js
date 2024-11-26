@@ -33,35 +33,38 @@ async function callProviderAPI(payload) {
   }
 }
 
+// 8. Get List of Games
 exports.getlist = async (req, res) => {
     try {
-        const payload = {
-            api_password: API_PASSWORD,
-            api_login: API_USERNAME,
-            method: "getGameList",
-            show_systems: 0,
-            show_additional: false,
-            currency: "EUR",
-        };
-
-        console.log("[DEBUG] Fetching game list with payload:", payload);
-        const response = await callProviderAPI(payload);
-
-        if (response.error !== 0) {
-            return handleError(
-                res,
-                "Failed to fetch game list from provider.",
-                response,
-                500
-            );
-        }
-
+      const payload = {
+        api_password: API_PASSWORD,
+        api_login: API_USERNAME,
+        method: "getGameList",
+        show_systems: 0,
+        show_additional: false,
+        currency: "EUR",
+      };
+  
+      console.log("[DEBUG] Fetching game list with payload:", payload);
+  
+      // Generate key for secure API communication
+      const key = generateKey(payload);
+      payload.key = key;
+  
+      const response = await callProviderAPI(payload);
+  
+      if (response.error === 0) {
         res.status(200).json({ success: true, data: response.response });
+      } else {
+        console.error("[ERROR] Failed to fetch game list:", response.message || response.error);
+        return handleError(res, "Failed to fetch game list from provider.", 500);
+      }
     } catch (error) {
-        handleError(res, "Error fetching game list.", error.message);
+      console.error("[ERROR] Unexpected error fetching game list:", error.message);
+      handleError(res, "An error occurred while fetching the game list.", 500);
     }
-};
-
+  };
+  
 
 
 // 1. Check if player exists
