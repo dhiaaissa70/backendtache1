@@ -344,63 +344,16 @@ exports.debit = async (req, res) => {
       amount,
       provider,
       game_id,
-      game_id_hash,
       transaction_id,
-      round_id = "",
-      gameplay_final = 0,
-      is_freeround_bet = false,
-      jackpot_contribution_in_amount = 0,
       gamesession_id,
       currency = "EUR",
     } = req.query;
   
-    // Validation for required parameters
-    if (
-      !username ||
-      !remote_id ||
-      !session_id ||
-      !amount ||
-      !provider ||
-      !game_id ||
-      !transaction_id ||
-      !gamesession_id
-    ) {
-      console.error("[ERROR] Missing required parameters:", {
-        username,
-        remote_id,
-        session_id,
-        amount,
-        provider,
-        game_id,
-        transaction_id,
-        gamesession_id,
-      });
-      return res.status(400).json({
-        success: false,
-        message: "Missing required parameters for debit",
-      });
+    if (!username || !remote_id || !amount || !provider || !game_id || !transaction_id) {
+      return res.status(400).json({ success: false, message: "Missing required parameters for debit" });
     }
   
     try {
-      // Log incoming parameters for debugging
-      console.log("[DEBUG] Incoming Parameters:", {
-        username,
-        remote_id,
-        session_id,
-        amount,
-        provider,
-        game_id,
-        game_id_hash,
-        transaction_id,
-        round_id,
-        gameplay_final,
-        is_freeround_bet,
-        jackpot_contribution_in_amount,
-        gamesession_id,
-        currency,
-      });
-  
-      // Prepare request parameters
       const params = {
         callerId: process.env.API_USERNAME,
         callerPassword: process.env.API_PASSWORD,
@@ -411,56 +364,37 @@ exports.debit = async (req, res) => {
         amount: parseFloat(amount).toFixed(2),
         provider,
         game_id,
-        game_id_hash,
         transaction_id,
-        round_id,
-        gameplay_final: gameplay_final ? 1 : 0,
-        is_freeround_bet: is_freeround_bet ? 1 : 0,
-        jackpot_contribution_in_amount: parseFloat(jackpot_contribution_in_amount).toFixed(6),
         gamesession_id,
         currency,
       };
   
-      // Log before generating the key
-      console.log("[DEBUG] Parameters Before Key Generation:", params);
-  
-      // Generate and attach the key
       params.key = generateKey(params);
+      console.log("[DEBUG] Debit Request:", params);
   
-      // Log the generated key and final parameters
-      console.log("[DEBUG] Generated Key:", params.key);
-      console.log("[DEBUG] Final Request Parameters with Key:", params);
-  
-      // Send the request to the provider
       const response = await axios.get(PROVIDER_API_URL, { params });
-  
-      // Log provider response
       console.log("[DEBUG] Provider Response:", response.data);
   
-      // Handle successful response
       if (response.data.status === "200") {
-        const updatedBalance = response.data.balance;
-        await User.updateOne(
-          { username, remote_id },
-          { $set: { balance: updatedBalance } } // Update local balance
-        );
-        console.log("[INFO] Local balance updated successfully.");
-      
+        const updatedBalance = parseFloat(response.data.balance).toFixed(2);
+        await User.updateOne({ username, remote_id }, { $set: { balance: updatedBalance } });
+        console.log("[INFO] Local balance updated:", updatedBalance);
+  
+        return res.status(200).json({
+          success: true,
+          balance: updatedBalance,
+          transaction_id: response.data.transaction_id,
+        });
       } else {
-        console.error(`[ERROR] Provider returned an error: ${response.data.msg || "Unknown error"}`);
-        return res.status(response.data.status || 400).json({
+        console.error(`[ERROR] Debit failed: ${response.data.msg || "Unknown error"}`);
+        return res.status(400).json({
           success: false,
-          message: response.data.msg || "Failed to debit.",
+          message: response.data.msg || "Failed to process debit.",
         });
       }
     } catch (error) {
-      // Log any unexpected errors
-      console.error("[ERROR] Debit API Unexpected Error:", error.message, error.stack);
-  
-      return res.status(500).json({
-        success: false,
-        message: "An error occurred while processing the debit.",
-      });
+      console.error("[ERROR] Debit Unexpected Error:", error.message);
+      return res.status(500).json({ success: false, message: "An error occurred during debit." });
     }
   };
   
