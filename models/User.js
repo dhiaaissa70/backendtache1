@@ -28,6 +28,9 @@ const UserSchema = new mongoose.Schema({
   userdate: { 
     type: Date,
     default: Date.now 
+  },
+  remote_id: { 
+    type: Number,
   }
 });
 

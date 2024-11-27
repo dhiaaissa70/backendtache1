@@ -36,6 +36,7 @@ async function callProviderAPI(payload) {
   function handleError(res, message, statusCode = 500) {
     res.status(statusCode).json({ status: statusCode, message });
   }
+
   
   // 1. Check if player exists
   exports.playerExists = async (req, res) => {
@@ -72,6 +73,7 @@ async function callProviderAPI(payload) {
       return handleError(res, "Username and password are required", 400);
   
     try {
+      // Prepare payload for API request
       const payload = {
         api_password: API_PASSWORD,
         api_login: API_USERNAME,
@@ -81,17 +83,41 @@ async function callProviderAPI(payload) {
         currency,
       };
   
+      // Call the provider API
       const response = await callProviderAPI(payload);
   
       if (response.error === 0) {
-        res.status(200).json({ success: true, data: response.response });
+        const { id: remote_id } = response.data;
+  
+        // Update local database with remote_id
+        const user = await User.findOneAndUpdate(
+          { username }, // Search by username
+          { $set: { remote_id } }, // Update the `remote_id` field
+          { new: true } // Return the updated document
+        );
+  
+        if (!user) {
+          // If user doesn't exist locally, create one
+          const newUser = new User({
+            username,
+            password, // In production, ensure the password is hashed
+            remote_id,
+            currency,
+          });
+          await newUser.save();
+        }
+  
+        // Respond with success
+        res.status(200).json({ success: true, data: response.data });
       } else {
         res.status(400).json({ success: false, message: response.message });
       }
     } catch (error) {
-      handleError(res, error.message);
+      console.error("[ERROR] createPlayer:", error.message);
+      handleError(res, "Internal server error.", 500);
     }
   };
+  
   
 
  // Route to fetch game list
@@ -245,55 +271,35 @@ exports.getlist = async (req, res) => {
 
 // 4. Get Balance
 exports.getBalance = async (req, res) => {
-    const { remote_id, session_id, currency, username, game_id_hash } = req.query;
-  
-    if (!remote_id || !username || !currency) {
-      // Minimal checks as recommended
-      console.error("[ERROR] Missing required parameters for getBalance.");
-      return res.status(200).json({ status: "400", message: "Missing required parameters." });
+  const { remote_id, session_id, currency, username } = req.query;
+
+  if (!remote_id || !username || !currency) {
+    console.error("[ERROR] Missing required parameters for getBalance.");
+    return res.status(400).json({ status: "400", message: "Missing required parameters." });
+  }
+
+  try {
+    // Fetch user by remote_id
+    const user = await User.findOne({ remote_id });
+
+    if (!user) {
+      console.error("[ERROR] Player not found for remote_id:", remote_id);
+      return res.status(404).json({ status: "404", balance: 0, message: "Player not found." });
     }
-  
-    try {
-      // Step 1: Validate the request's key
-      const queryParams = { 
-        remote_id, 
-        session_id, 
-        currency, 
-        username, 
-        game_id_hash, 
-        action: "balance" 
-      };
-  
-      const expectedKey = generateKey(queryParams); // Using your API_SALT
-      const incomingKey = req.query.key;
-  
-      /*if (expectedKey !== incomingKey) {
-        console.error("[ERROR] Invalid key for balance request.");
-        return res.status(200).json({ status: "400", message: "Invalid key." });
-      }*/
-  
-      // Step 2: Fetch the player's balance using remote_id
-      const player = await User.findOne({ remote_id }); // Ensure remote_id is stored during `createPlayer`.
-  
-      if (!player) {
-        console.error("[ERROR] Player not found for remote_id:", remote_id);
-        return res.status(200).json({ status: "404", balance: 0, message: "Player not found." });
-      }
-  
-      const balance = player.balance; // Assume you have a `balance` field in your `User` model.
-  
-      // Step 3: Return the player's balance
-      return res.status(200).json({ status: "200", balance: balance.toFixed(2) });
-    } catch (error) {
-      console.error("[ERROR] Unexpected error in getBalance:", error.message);
-  
-      // Step 4: Respond with a general error message
-      return res.status(500).json({
-        status: "500",
-        message: "Internal server error. Please try again later.",
-      });
-    }
-  };
+
+    res.status(200).json({
+      status: "200",
+      balance: user.balance.toFixed(2),
+    });
+  } catch (error) {
+    console.error("[ERROR] getBalance:", error.message);
+    res.status(500).json({
+      status: "500",
+      message: "Internal server error.",
+    });
+  }
+};
+
   
 
 // 5. Debit (Bet)
