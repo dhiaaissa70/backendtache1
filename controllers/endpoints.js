@@ -349,7 +349,17 @@ exports.debit = async (req, res) => {
       currency = "EUR",
     } = req.query;
   
-    if (!username || !remote_id || !amount || !provider || !game_id || !transaction_id) {
+    if (!username || !remote_id || !session_id || !amount || !provider || !game_id || !transaction_id || !gamesession_id) {
+      console.error("[ERROR] Missing required parameters:", {
+        username,
+        remote_id,
+        session_id,
+        amount,
+        provider,
+        game_id,
+        transaction_id,
+        gamesession_id,
+      });
       return res.status(400).json({ success: false, message: "Missing required parameters for debit" });
     }
   
@@ -370,33 +380,54 @@ exports.debit = async (req, res) => {
       };
   
       params.key = generateKey(params);
-      console.log("[DEBUG] Debit Request:", params);
+  
+      console.log("[DEBUG] Debit Request Parameters:", params);
   
       const response = await axios.get(PROVIDER_API_URL, { params });
+  
       console.log("[DEBUG] Provider Response:", response.data);
   
       if (response.data.status === "200") {
         const updatedBalance = parseFloat(response.data.balance).toFixed(2);
-        await User.updateOne({ username, remote_id }, { $set: { balance: updatedBalance } });
-        console.log("[INFO] Local balance updated:", updatedBalance);
   
-        return res.status(200).json({
-          success: true,
-          balance: updatedBalance,
-          transaction_id: response.data.transaction_id,
-        });
+        // Update local balance
+        const updateResult = await User.updateOne(
+          { username, remote_id },
+          { $set: { balance: updatedBalance } }
+        );
+  
+        console.log("[DEBUG] Update Result:", updateResult);
+  
+        if (updateResult.modifiedCount > 0) {
+          console.log("[INFO] Balance updated successfully in database:", updatedBalance);
+          return res.status(200).json({
+            success: true,
+            balance: updatedBalance,
+            transaction_id: response.data.transaction_id,
+          });
+        } else {
+          console.error("[ERROR] Balance update failed. No records were updated.");
+          return res.status(500).json({
+            success: false,
+            message: "Failed to update local balance.",
+          });
+        }
       } else {
-        console.error(`[ERROR] Debit failed: ${response.data.msg || "Unknown error"}`);
+        console.error(`[ERROR] Provider returned an error: ${response.data.msg || "Unknown error"}`);
         return res.status(400).json({
           success: false,
           message: response.data.msg || "Failed to process debit.",
         });
       }
     } catch (error) {
-      console.error("[ERROR] Debit Unexpected Error:", error.message);
-      return res.status(500).json({ success: false, message: "An error occurred during debit." });
+      console.error("[ERROR] Debit API Unexpected Error:", error.message, error.stack);
+      return res.status(500).json({
+        success: false,
+        message: "An error occurred while processing the debit.",
+      });
     }
   };
+  
   
   
 
