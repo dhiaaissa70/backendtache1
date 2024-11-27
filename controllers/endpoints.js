@@ -30,31 +30,35 @@ function handleError(res, message, statusCode = 500) {
   res.status(statusCode).json({ status: statusCode, message });
 }
 
-
 function generateKeys(params) {
+    // Step 1: Sort parameters alphabetically
     const sortedParams = Object.keys(params)
-      .sort() // Alphabetical order
-      .reduce((acc, key) => {
-        if (params[key] !== undefined && params[key] !== null) {
-          acc[key] = params[key]; // Include defined parameters
-        }
-        return acc;
-      }, {});
-  
-    const queryString = new URLSearchParams(sortedParams).toString();
-  
-    const generatedKey = crypto
-      .createHash("sha1")
-      .update(API_SALT + queryString)
-      .digest("hex");
-  
+        .sort()
+        .reduce((acc, key) => {
+            if (params[key] !== undefined && params[key] !== null) {
+                acc[key] = params[key];
+            }
+            return acc;
+        }, {});
+
     console.log("[DEBUG] Sorted Params for Key Generation:", sortedParams);
+
+    // Step 2: Create query string
+    const queryString = Object.entries(sortedParams)
+        .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
+        .join("&");
     console.log("[DEBUG] Query String:", queryString);
-    console.log("[DEBUG] Generated Key:", generatedKey);
-  
-    return generatedKey;
-  }
-  
+
+    // Step 3: Generate SHA1 hash
+    const hashInput = process.env.API_SALT + queryString;
+    console.log("[DEBUG] Hash Input:", hashInput);
+
+    const hash = crypto.createHash("sha1").update(hashInput).digest("hex");
+    console.log("[DEBUG] Generated Key:", hash);
+
+    return hash;
+}
+
 
 // 1. Get Game List
 exports.getlist = async (req, res) => {
