@@ -439,12 +439,13 @@ exports.debit = async (req, res) => {
   
       // Handle successful response
       if (response.data.status === "200") {
-        console.log(`[INFO] Debit Successful for Transaction ID: ${transaction_id}`);
-        return res.status(200).json({
-          success: true,
-          balance: response.data.balance,
-          transaction_id: response.data.transaction_id,
-        });
+        const updatedBalance = response.data.balance;
+        await User.updateOne(
+          { username, remote_id },
+          { $set: { balance: updatedBalance } } // Update local balance
+        );
+        console.log("[INFO] Local balance updated successfully.");
+      
       } else {
         console.error(`[ERROR] Provider returned an error: ${response.data.msg || "Unknown error"}`);
         return res.status(response.data.status || 400).json({
@@ -527,11 +528,12 @@ exports.credit = async (req, res) => {
       console.log("[DEBUG] Provider Response:", response.data);
   
       if (response.data.status === "200") {
-        return res.status(200).json({
-          success: true,
-          balance: response.data.balance,
-          transaction_id: response.data.transaction_id,
-        });
+        const updatedBalance = response.data.balance;
+        await User.updateOne(
+          { username, remote_id },
+          { $set: { balance: updatedBalance } } // Update local balance
+        );
+        console.log("[INFO] Local balance updated successfully.");
       } else {
         throw new Error(response.data.msg || "Credit failed");
       }

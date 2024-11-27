@@ -27,6 +27,6 @@ router.get("/", endpointController.debit); // Deduct bet amount from user's bala
 router.get("/", endpointController.credit); // Add win amount to user's balance
 
 // 8. Route to handle rollback callback
-router.get("/rollback", endpointController.rollback); // Rollback a previous transaction
+router.get("/", endpointController.rollback); // Rollback a previous transaction
 
 module.exports = router;
