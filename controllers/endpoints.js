@@ -87,7 +87,7 @@ async function callProviderAPI(payload) {
       const response = await callProviderAPI(payload);
   
       if (response.error === 0) {
-        const { id: remote_id } = response.data;
+        const {id} =response.data
   
         // Update local database with remote_id
         const user = await User.findOneAndUpdate(
@@ -95,6 +95,8 @@ async function callProviderAPI(payload) {
           { $set: { remote_id } }, // Update the `remote_id` field
           { new: true } // Return the updated document
         );
+
+        console.log(response.data)
   
         if (!user) {
           // If user doesn't exist locally, create one
