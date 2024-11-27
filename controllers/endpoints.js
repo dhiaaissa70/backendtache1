@@ -6,7 +6,8 @@ const Transfer = require("../models/transfer");
 const API_PASSWORD = process.env.API_PASSWORD;
 const API_USERNAME = process.env.API_USERNAME;
 const API_SALT = process.env.API_SALT;
-const BASE_URL = process.env.BASE_URL; // The base provider URL (e.g., {{urlstage}})
+const BASE_URL = process.env.BASE_URL;
+const PROVIDER_API_URL = process.env.PROVIDER_API_URL || "https://catch-me.bet/api";
 
 // Helper function to generate SHA1 key
 async function callProviderAPI(payload) {
@@ -422,45 +423,9 @@ exports.debit = async (req, res) => {
 
 // 6. Credit (Win)
 exports.credit = async (req, res) => {
-  const {
-    username,
-    remote_id,
-    session_id,
-    amount,
-    provider,
-    game_id,
-    game_id_hash,
-    transaction_id,
-    round_id,
-    gameplay_final,
-    is_freeround_bet,
-    jackpot_contribution_in_amount,
-    gamesession_id,
-  } = req.query;
-
-  if (
-    !username ||
-    !remote_id ||
-    !session_id ||
-    !amount ||
-    !provider ||
-    !game_id ||
-    !game_id_hash ||
-    !transaction_id ||
-    !round_id ||
-    !gamesession_id
-  ) {
-    return handleError(res, "Missing required parameters", 400);
-  }
-
-  try {
-    const params = {
-      callerId: API_USERNAME,
-      callerPassword: API_PASSWORD,
-      callerPrefix: "700ha",
-      action: "credit",
-      remote_id,
+    const {
       username,
+      remote_id,
       session_id,
       amount,
       provider,
@@ -468,22 +433,69 @@ exports.credit = async (req, res) => {
       game_id_hash,
       transaction_id,
       round_id,
-      gameplay_final,
-      is_freeround_bet,
-      jackpot_contribution_in_amount,
+      gameplay_final = 1, // Default to finished
+      is_freeround_bet = false,
+      jackpot_contribution_in_amount = 0,
       gamesession_id,
-    };
-
-    const key = generateKey(params);
-    params.key = key;
-
-    const response = await callProviderAPI(params);
-    res.status(200).json(response);
-  } catch (error) {
-    handleError(res, error.message);
-  }
-};
-
+      currency = "EUR",
+    } = req.query;
+  
+    // Validate required fields
+    if (
+      !username ||
+      !remote_id ||
+      !session_id ||
+      !amount ||
+      !provider ||
+      !game_id ||
+      !transaction_id ||
+      !gamesession_id
+    ) {
+      return handleError(res, "Missing required parameters for credit", 400);
+    }
+  
+    try {
+      const params = {
+        callerId: API_USERNAME,
+        callerPassword: API_PASSWORD,
+        action: "credit",
+        remote_id,
+        username,
+        session_id,
+        amount: parseFloat(amount).toFixed(2),
+        provider,
+        game_id,
+        game_id_hash,
+        transaction_id,
+        round_id,
+        gameplay_final,
+        is_freeround_bet: is_freeround_bet ? 1 : 0,
+        jackpot_contribution_in_amount: parseFloat(jackpot_contribution_in_amount).toFixed(6),
+        gamesession_id,
+        currency,
+      };
+  
+      params.key = generateKey(params); // Generate the authentication key
+  
+      console.log("[DEBUG] Credit Payload:", params);
+  
+      const response = await axios.get(`${PROVIDER_API_URL}`, { params });
+      console.log("[DEBUG] Provider Response:", response.data);
+  
+      if (response.data.status === "200") {
+        return res.status(200).json({
+          success: true,
+          balance: response.data.balance,
+          transaction_id: response.data.transaction_id,
+        });
+      } else {
+        throw new Error(response.data.msg || "Credit failed");
+      }
+    } catch (error) {
+      console.error("[ERROR] Credit API Error:", error.message);
+      return handleError(res, "Internal server error during credit", 500);
+    }
+  };
 // 7. Rollback
 exports.rollback = async (req, res) => {
   const {
