@@ -31,7 +31,7 @@ const UserSchema = new mongoose.Schema({
   },
   remote_id: { 
     type: Number,
-    required: true
+    
   }
 });
 
