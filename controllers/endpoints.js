@@ -28,8 +28,31 @@ async function callProviderAPI(payload) {
   
   // Utility function to generate SHA1 key
   function generateKey(params) {
-    const queryString = new URLSearchParams(params).toString();
-    return crypto.createHash("sha1").update(API_SALT + queryString).digest("hex");
+    // Step 1: Sort parameters alphabetically
+    const sortedParams = Object.keys(params)
+      .sort()
+      .reduce((acc, key) => {
+        if (params[key] !== undefined && params[key] !== null && params[key] !== "") {
+          acc[key] = params[key];
+        }
+        return acc;
+      }, {});
+  
+    console.log("[DEBUG] Sorted Params for Key Generation:", sortedParams);
+  
+    // Step 2: Create query string
+    const queryString = Object.entries(sortedParams)
+      .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
+      .join("&");
+  
+    console.log("[DEBUG] Query String:", queryString);
+  
+    // Step 3: Concatenate salt and generate hash
+    const hashInput = `${process.env.API_SALT}${queryString}`;
+    const key = crypto.createHash("sha1").update(hashInput).digest("hex");
+  
+    console.log("[DEBUG] Generated Key:", key);
+    return key;
   }
   
   // Error handler function
@@ -322,15 +345,14 @@ exports.debit = async (req, res) => {
       game_id,
       game_id_hash,
       transaction_id,
-      round_id,
-      gameplay_final,
-      is_freeround_bet = false, // Optional
-      jackpot_contribution_in_amount = 0, // Optional
+      round_id = "", // Optional field
+      gameplay_final = 0, // Default to unfinished (0)
+      is_freeround_bet = false,
+      jackpot_contribution_in_amount = 0,
       gamesession_id,
       currency = "EUR", // Default to EUR
     } = req.query;
   
-    // Validate required fields
     if (
       !username ||
       !remote_id ||
@@ -339,14 +361,13 @@ exports.debit = async (req, res) => {
       !provider ||
       !game_id ||
       !transaction_id ||
-      !round_id ||
       !gamesession_id
     ) {
       return handleError(res, "Missing required parameters", 400);
     }
   
     try {
-      // Prepare the query parameters
+      // Prepare the request parameters
       const params = {
         callerId: API_USERNAME,
         callerPassword: API_PASSWORD,
@@ -354,67 +375,43 @@ exports.debit = async (req, res) => {
         remote_id,
         username,
         session_id,
-        amount: parseFloat(amount), // Ensure `amount` is a number
+        amount: parseFloat(amount).toFixed(2),
         provider,
         game_id,
         game_id_hash,
         transaction_id,
         round_id,
-        gameplay_final: gameplay_final ? 1 : 0, // Ensure boolean is sent as 0 or 1
-        is_freeround_bet: is_freeround_bet ? 1 : 0, // Ensure boolean is sent as 0 or 1
-        jackpot_contribution_in_amount: parseFloat(jackpot_contribution_in_amount),
+        gameplay_final: gameplay_final ? 1 : 0,
+        is_freeround_bet: is_freeround_bet ? 1 : 0,
+        jackpot_contribution_in_amount: parseFloat(jackpot_contribution_in_amount).toFixed(6),
         gamesession_id,
         currency,
       };
   
-      // Generate the key for authentication
-      const key = generateKey(params);
-      params.key = key;
+      // Generate key and attach to parameters
+      params.key = generateKey(params);
   
       console.log("[DEBUG] Debit Payload:", params);
   
-      // Send the debit request to the provider
+      // Send the request to the provider
       const response = await axios.get(`${PROVIDER_API_URL}`, { params });
-  
       console.log("[DEBUG] Provider Response:", response.data);
   
-      // Handle provider response
       if (response.data.status === "200") {
-        // Success: Debit transaction completed
-        console.log(
-          `[INFO] Debit successful for user ${username}. Remaining balance: ${response.data.balance}`
-        );
+        console.log(`[INFO] Debit successful for ${username}. Remaining balance: ${response.data.balance}`);
         return res.status(200).json({
           success: true,
           balance: response.data.balance,
           transaction_id: response.data.transaction_id,
         });
       } else if (response.data.status === "403") {
-        // Insufficient balance or refusal
-        console.error(
-          `[ERROR] Debit refused for user ${username}. Reason: ${response.data.msg}`
-        );
         return res.status(403).json({
           success: false,
-          message: response.data.msg || "Debit refused",
+          message: response.data.msg || "Insufficient funds",
           balance: response.data.balance || 0,
         });
-      } else if (response.data.status === "500") {
-        // Internal provider error
-        console.error(
-          `[ERROR] Provider internal error for user ${username}. Reason: ${response.data.msg}`
-        );
-        return res.status(500).json({
-          success: false,
-          message: response.data.msg || "Internal provider error",
-        });
       } else {
-        // Unexpected response
-        console.error(
-          `[ERROR] Unexpected provider response for user ${username}:`,
-          response.data
-        );
-        return handleError(res, "Unexpected provider response", 500);
+        throw new Error(response.data.msg || "Debit failed");
       }
     } catch (error) {
       console.error("[ERROR] Debit API Error:", error.message);
