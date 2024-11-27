@@ -240,7 +240,7 @@ exports.getGame = async (req, res) => {
     const getGamePayload = {
       api_password: API_PASSWORD,
       api_login: API_USERNAME,
-      method: "getGame",
+      method: "getGameDirect",
       gameid,
       user_username: username,
       user_password: "securePassword123",
