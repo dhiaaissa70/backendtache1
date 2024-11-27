@@ -35,31 +35,36 @@ function handleError(res, message, statusCode = 500) {
  * @param {Object} params - Query parameters to include in the key generation.
  */
 function generateKeys(params) {
+    // Step 1: Sort parameters alphabetically
     const sortedParams = Object.keys(params)
-      .sort()
-      .reduce((acc, key) => {
-        if (params[key] !== undefined && params[key] !== null) {
-          acc[key] = params[key];
-        }
-        return acc;
-      }, {});
-  
+        .sort()
+        .reduce((acc, key) => {
+            if (params[key] !== undefined && params[key] !== null) {
+                acc[key] = params[key];
+            }
+            return acc;
+        }, {});
+
     console.log("[DEBUG] Sorted Params for Key Generation:", sortedParams);
-  
+
+    // Step 2: Build the query string
     const queryString = Object.entries(sortedParams)
-      .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
-      .join("&");
-  
+        .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
+        .join("&");
+
     console.log("[DEBUG] Query String:", queryString);
-  
+
+    // Step 3: Generate the hash input using API_SALT
     const hashInput = API_SALT + queryString;
     console.log("[DEBUG] Hash Input:", hashInput);
-  
+
+    // Step 4: Generate the SHA-1 hash
     const hash = crypto.createHash("sha1").update(hashInput).digest("hex");
     console.log("[DEBUG] Generated Key:", hash);
-  
+
     return hash;
-  }
+}
+
 // 1. Get Game List
 exports.getlist = async (req, res) => {
   const { show_systems = 0, show_additional = false, currency = "EUR" } = req.query;
@@ -175,57 +180,117 @@ exports.createPlayer = async (req, res) => {
 
 // 4. Get Game
 exports.getGame = async (req, res) => {
-    const { gameid, username, play_for_fun = false, lang = "en", currency = "EUR" } = req.body;
+  const {
+    gameid,
+    username,
+    play_for_fun = false,
+    lang = "en",
+    currency = "EUR",
+    homeurl = "https://catch-me.bet",
+    cashierurl = "https://catch-me.bet",
+  } = req.body;
 
   if (!gameid || !username) {
-    return res.status(400).json({ success: false, message: "Game ID and username are required." });
+    return handleError(res, "Game ID and username are required", 400);
   }
 
   try {
     const user = await User.findOne({ username });
     if (!user) {
-      return res.status(404).json({ success: false, message: "User not found." });
+      return handleError(res, "User not found in local database", 404);
     }
 
-    const payload = {
+    const playerExistsPayload = {
       api_password: API_PASSWORD,
       api_login: API_USERNAME,
-      method: "getGameDirect",
+      method: "playerExists",
+      user_username: username,
+      currency,
+    };
+
+    const playerExistsResponse = await callProviderAPI(playerExistsPayload);
+
+    if (playerExistsResponse.error === 0 && playerExistsResponse.response) {
+      const updateBalancePayload = {
+        api_password: API_PASSWORD,
+        api_login: API_USERNAME,
+        method: "credit",
+        remote_id: playerExistsResponse.response.id,
+        amount: user.balance,
+        action: "credit",
+        currency,
+      };
+      await callProviderAPI(updateBalancePayload);
+    } else {
+      const createPlayerPayload = {
+        api_password: API_PASSWORD,
+        api_login: API_USERNAME,
+        method: "createPlayer",
+        user_username: username,
+        user_password: "securePassword123",
+        currency,
+      };
+
+      const createPlayerResponse = await callProviderAPI(createPlayerPayload);
+      if (createPlayerResponse.error !== 0) {
+        return handleError(res, "Failed to create player", 400);
+      }
+    }
+
+    const getGamePayload = {
+      api_password: API_PASSWORD,
+      api_login: API_USERNAME,
+      method: "getGame",
       gameid,
       user_username: username,
       user_password: "securePassword123",
       play_for_fun: play_for_fun ? 1 : 0,
       lang,
       currency,
-      homeurl: "https://catch-me.bet",
+      homeurl,
+      cashierurl,
     };
 
-    const response = await callProviderAPI(payload);
+    const gameResponse = await callProviderAPI(getGamePayload);
 
-    if (response.error !== 0) {
-      console.error("[ERROR] Failed to fetch game URL:", response);
-      return res.status(400).json({ success: false, message: response.message || "Failed to fetch game URL." });
+    if (gameResponse.error === 0) {
+      return res.status(200).json({
+        success: true,
+        data: {
+          gameUrl: gameResponse.response,
+          gamesession_id: gameResponse.gamesession_id,
+          sessionid: gameResponse.sessionid,
+          balance: user.balance.toFixed(2),
+        },
+      });
+    } else {
+      return handleError(res, gameResponse.message || "Failed to launch game", 400);
     }
-
-    res.status(200).json({
-      success: true,
-      data: {
-        gameUrl: response.response,
-        gamesession_id: response.gamesession_id,
-        sessionid: response.sessionid,
-      },
-    });
   } catch (error) {
-    console.error("[ERROR] Unexpected error in getGameDirect:", error.message);
-    res.status(500).json({ success: false, message: "An error occurred while fetching the game URL." });
+    console.error("[ERROR] Unexpected error in getGame:", error.message);
+    handleError(res, "An error occurred while fetching the game URL.", 500);
   }
 };
+
 
 // 4. Handle Balance Callback
 exports.getBalance = async (req, res) => {
     try {
-      const { callerId, callerPassword, remote_id, username, session_id, currency, gamesession_id, key } = req.query;
+      const {
+        callerId,
+        callerPassword,
+        remote_id,
+        username,
+        session_id,
+        currency,
+        gamesession_id,
+        key,
+      } = req.query;
   
+      // Step 1: Log all incoming parameters
+      console.log("[DEBUG] Incoming Parameters:", req.query);
+  
+      // Step 2: Generate the expected key
       const queryParams = {
         callerId,
         callerPassword,
@@ -234,28 +299,37 @@ exports.getBalance = async (req, res) => {
         session_id,
         currency,
         gamesession_id,
-        action: "balance",
+        action: "balance", // Action must match provider's request
       };
   
       const expectedKey = generateKeys(queryParams);
+  
+      console.log("[DEBUG] Expected Key:", expectedKey);
+      console.log("[DEBUG] Received Key:", key);
   
       if (expectedKey !== key) {
         console.error("[ERROR] Invalid key for balance request.");
         return res.status(400).json({ status: "400", message: "Invalid key." });
       }
   
+      // Step 3: Fetch user balance
       const user = await User.findOne({ username });
       if (!user) {
+        console.error("[ERROR] Player not found:", username);
         return res.status(404).json({ status: "404", balance: 0, message: "Player not found." });
       }
   
-      res.status(200).json({
+      console.log(`[INFO] Balance request successful. Balance: ${user.balance}`);
+      return res.status(200).json({
         status: "200",
         balance: user.balance.toFixed(2),
       });
     } catch (error) {
       console.error("[ERROR] Unexpected error in getBalance:", error.message);
-      res.status(500).json({ status: "500", message: "Internal server error." });
+      return res.status(500).json({
+        status: "500",
+        message: "Internal server error. Please try again later.",
+      });
     }
   };
   
