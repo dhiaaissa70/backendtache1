@@ -135,6 +135,7 @@ exports.getAllUsers = async (req, res, next) => {
             username: user.username,
             role: user.role,
             balance: user.balance,
+            remote_id:user.remote_id,
             createrid: user.createrid ? user.createrid._id : null,
             creatorInfo: user.createrid ? {
                 username: user.createrid.username,
