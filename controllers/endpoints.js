@@ -180,98 +180,82 @@ exports.createPlayer = async (req, res) => {
 
 // 4. Get Game
 exports.getGame = async (req, res) => {
-  const {
-    gameid,
-    username,
-    play_for_fun = false,
-    lang = "en",
-    currency = "EUR",
-    homeurl = "https://catch-me.bet",
-    cashierurl = "https://catch-me.bet",
-  } = req.body;
-
-  if (!gameid || !username) {
-    return handleError(res, "Game ID and username are required", 400);
-  }
-
-  try {
-    const user = await User.findOne({ username });
-    if (!user) {
-      return handleError(res, "User not found in local database", 404);
+    const {
+      gameid,
+      username,
+      play_for_fun = false,
+      lang = "en",
+      currency = "EUR",
+      homeurl = "https://catch-me.bet", // Home button URL
+    } = req.body;
+  
+    if (!gameid || !username) {
+      return handleError(res, "Game ID and username are required", 400);
     }
-
-    const playerExistsPayload = {
-      api_password: API_PASSWORD,
-      api_login: API_USERNAME,
-      method: "playerExists",
-      user_username: username,
-      currency,
-    };
-
-    const playerExistsResponse = await callProviderAPI(playerExistsPayload);
-
-    if (playerExistsResponse.error === 0 && playerExistsResponse.response) {
-      const updateBalancePayload = {
+  
+    try {
+      // Validate user exists in the database
+      const user = await User.findOne({ username });
+      if (!user) {
+        return handleError(res, "User not found in local database", 404);
+      }
+  
+      // Prepare API payload
+      const payload = {
         api_password: API_PASSWORD,
         api_login: API_USERNAME,
-        method: "credit",
-        remote_id: playerExistsResponse.response.id,
-        amount: user.balance,
-        action: "credit",
-        currency,
-      };
-      await callProviderAPI(updateBalancePayload);
-    } else {
-      const createPlayerPayload = {
-        api_password: API_PASSWORD,
-        api_login: API_USERNAME,
-        method: "createPlayer",
+        method: "getGameDirect",
+        gameid,
         user_username: username,
         user_password: "securePassword123",
+        play_for_fun: play_for_fun ? 1 : 0,
+        lang,
         currency,
+        homeurl,
       };
-
-      const createPlayerResponse = await callProviderAPI(createPlayerPayload);
-      if (createPlayerResponse.error !== 0) {
-        return handleError(res, "Failed to create player", 400);
+  
+      console.log("[DEBUG] Payload for getGameDirect:", payload);
+  
+      // Call provider API
+      const response = await callProviderAPI(payload);
+  
+      if (response.error === 0) {
+        const { response: gameResponse, gamesession_id, sessionid } = response;
+        
+        // Check if response is an object (embed_code) or string (url)
+        let gameData = {};
+        if (typeof gameResponse === "string") {
+          gameData = {
+            type: "url",
+            value: gameResponse,
+          };
+        } else if (gameResponse.embed_code) {
+          gameData = {
+            type: "embed_code",
+            value: gameResponse.embed_code,
+          };
+        } else {
+          return handleError(res, "Invalid response from provider.", 400);
+        }
+  
+        // Return the game details to the frontend
+        return res.status(200).json({
+          success: true,
+          data: {
+            gameData,
+            gamesession_id,
+            sessionid,
+          },
+        });
+      } else {
+        return handleError(res, response.message || "Failed to launch game", 400);
       }
+    } catch (error) {
+      console.error("[ERROR] Unexpected error in getGame:", error.message);
+      handleError(res, "An error occurred while fetching the game URL.", 500);
     }
-
-    const getGamePayload = {
-      api_password: API_PASSWORD,
-      api_login: API_USERNAME,
-      method: "getGameDirect",
-      gameid,
-      user_username: username,
-      user_password: "securePassword123",
-      play_for_fun: play_for_fun ? 1 : 0,
-      lang,
-      currency,
-      homeurl,
-      cashierurl,
-    };
-
-    const gameResponse = await callProviderAPI(getGamePayload);
-
-    if (gameResponse.error === 0) {
-      return res.status(200).json({
-        success: true,
-        data: {
-          gameUrl: gameResponse.response,
-          gamesession_id: gameResponse.gamesession_id,
-          sessionid: gameResponse.sessionid,
-          balance: user.balance.toFixed(2),
-        },
-      });
-    } else {
-      return handleError(res, gameResponse.message || "Failed to launch game", 400);
-    }
-  } catch (error) {
-    console.error("[ERROR] Unexpected error in getGame:", error.message);
-    handleError(res, "An error occurred while fetching the game URL.", 500);
-  }
-};
-
+  };
+  
 
 // 4. Handle Balance Callback
 exports.getBalance = async (req, res) => {
