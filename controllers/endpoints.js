@@ -350,12 +350,14 @@ exports.debit = async (req, res) => {
       currency = "EUR",
     } = req.query;
   
+    // Validate required parameters
     if (!username || !remote_id || !session_id || !amount || !provider || !game_id || !transaction_id || !gamesession_id) {
       console.error("[ERROR] Missing required parameters for debit:", { username, remote_id, session_id, amount, provider, game_id, transaction_id, gamesession_id });
       return res.status(400).json({ success: false, message: "Missing required parameters for debit." });
     }
   
     try {
+      // Prepare request parameters for the provider
       const params = {
         callerId: process.env.API_USERNAME,
         callerPassword: process.env.API_PASSWORD,
@@ -371,11 +373,11 @@ exports.debit = async (req, res) => {
         currency,
       };
   
+      // Generate the key for the provider API
       params.key = generateKey(params);
-  
       console.log("[DEBUG] Debit Request Parameters:", params);
   
-      // Send the request to the provider
+      // Make the API call to the provider
       const response = await axios.get(PROVIDER_API_URL, { params });
   
       console.log("[DEBUG] Provider Response:", response.data);
@@ -383,12 +385,14 @@ exports.debit = async (req, res) => {
       if (response.data.status === "200") {
         const updatedBalance = parseFloat(response.data.balance).toFixed(2);
   
+        // Check if user exists in the local database
         const user = await User.findOne({ username, remote_id });
         if (!user) {
           console.error("[ERROR] User not found for debit.");
           return res.status(404).json({ success: false, message: "User not found." });
         }
   
+        // Create a transfer record for rollback or auditing purposes
         const newTransfer = new Transfer({
           senderId: user._id,
           type: "debit",
@@ -400,10 +404,11 @@ exports.debit = async (req, res) => {
   
         await newTransfer.save();
   
+        // Update user's balance
         user.balance = updatedBalance;
         await user.save();
   
-        console.log("[INFO] Balance updated successfully:", updatedBalance);
+        console.log("[INFO] User balance updated successfully:", updatedBalance);
   
         return res.status(200).json({
           success: true,
@@ -411,6 +416,7 @@ exports.debit = async (req, res) => {
           transaction_id: response.data.transaction_id,
         });
       } else {
+        // Log provider's error and send a response back to the client
         console.error(`[ERROR] Provider returned an error: ${response.data.msg || "Unknown error"}`);
         return res.status(400).json({
           success: false,
@@ -418,24 +424,28 @@ exports.debit = async (req, res) => {
         });
       }
     } catch (error) {
+      // Handle any unexpected errors
       console.error("[ERROR] Debit API Unexpected Error:", error.message);
-      console.error("[DEBUG] Full Error Stack:", error.stack);
   
-      // Check if it's an Axios error and log additional info
+      // Detailed logging for Axios-specific errors
       if (error.response) {
         console.error("[DEBUG] Provider Error Response Data:", error.response.data);
         console.error("[DEBUG] Provider Error Status Code:", error.response.status);
         console.error("[DEBUG] Provider Error Headers:", error.response.headers);
       } else if (error.request) {
         console.error("[DEBUG] No response received from provider. Request details:", error.request);
+      } else {
+        console.error("[DEBUG] General Error:", error.message);
       }
   
+      // Send a response with status 500
       return res.status(500).json({
         success: false,
         message: "An error occurred while processing the debit.",
       });
     }
   };
+  
   
   
   
