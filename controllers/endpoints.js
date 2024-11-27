@@ -69,8 +69,9 @@ async function callProviderAPI(payload) {
   exports.createPlayer = async (req, res) => {
     const { username, password, currency = "EUR" } = req.body;
   
-    if (!username || !password)
+    if (!username || !password) {
       return handleError(res, "Username and password are required", 400);
+    }
   
     try {
       // Prepare payload for API request
@@ -87,31 +88,40 @@ async function callProviderAPI(payload) {
       const response = await callProviderAPI(payload);
   
       if (response.error === 0) {
-        const {id} =response.data
+        // Extract the remote_id from the API response
+        const { id: remote_id } = response.response; // Use `response.response` instead of `response.data`
   
         // Update local database with remote_id
-        const user = await User.findOneAndUpdate(
+        let user = await User.findOneAndUpdate(
           { username }, // Search by username
           { $set: { remote_id } }, // Update the `remote_id` field
           { new: true } // Return the updated document
         );
-
-        console.log(response.data)
   
         if (!user) {
           // If user doesn't exist locally, create one
-          const newUser = new User({
+          user = new User({
             username,
             password, // In production, ensure the password is hashed
             remote_id,
-            currency,
+            balance: 0, // Default balance
           });
-          await newUser.save();
+          await user.save();
         }
   
+        console.log(`[DEBUG] Updated user with remote_id: ${remote_id}`);
+  
         // Respond with success
-        res.status(200).json({ success: true, data: response.data });
+        res.status(200).json({
+          success: true,
+          data: {
+            username: user.username,
+            remote_id: user.remote_id,
+            balance: user.balance,
+          },
+        });
       } else {
+        console.error(`[ERROR] Failed to create player: ${response.message}`);
         res.status(400).json({ success: false, message: response.message });
       }
     } catch (error) {
@@ -119,6 +129,7 @@ async function callProviderAPI(payload) {
       handleError(res, "Internal server error.", 500);
     }
   };
+  
   
   
 
