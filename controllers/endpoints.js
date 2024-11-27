@@ -346,14 +346,15 @@ exports.debit = async (req, res) => {
       game_id,
       game_id_hash,
       transaction_id,
-      round_id = "", // Optional field
-      gameplay_final = 0, // Default to unfinished (0)
+      round_id = "",
+      gameplay_final = 0,
       is_freeround_bet = false,
       jackpot_contribution_in_amount = 0,
       gamesession_id,
-      currency = "EUR", // Default to EUR
+      currency = "EUR",
     } = req.query;
   
+    // Validation for required parameters
     if (
       !username ||
       !remote_id ||
@@ -364,14 +365,16 @@ exports.debit = async (req, res) => {
       !transaction_id ||
       !gamesession_id
     ) {
-      return handleError(res, "Missing required parameters", 400);
+      return res.status(400).json({
+        success: false,
+        message: "Missing required parameters for debit",
+      });
     }
   
     try {
-      // Prepare the request parameters
       const params = {
-        callerId: API_USERNAME,
-        callerPassword: API_PASSWORD,
+        callerId: process.env.API_USERNAME,
+        callerPassword: process.env.API_PASSWORD,
         action: "debit",
         remote_id,
         username,
@@ -389,36 +392,38 @@ exports.debit = async (req, res) => {
         currency,
       };
   
-      // Generate key and attach to parameters
+      // Generate and attach the key
       params.key = generateKey(params);
   
-      console.log("[DEBUG] Debit Payload:", params);
+      console.log("[DEBUG] Debit API Request Params:", params);
   
-      // Send the request to the provider
-      const response = await axios.get(`${PROVIDER_API_URL}`, { params });
+      // Send the request
+      const response = await axios.get(PROVIDER_API_URL, { params });
+  
       console.log("[DEBUG] Provider Response:", response.data);
   
       if (response.data.status === "200") {
-        console.log(`[INFO] Debit successful for ${username}. Remaining balance: ${response.data.balance}`);
         return res.status(200).json({
           success: true,
           balance: response.data.balance,
           transaction_id: response.data.transaction_id,
         });
-      } else if (response.data.status === "403") {
-        return res.status(403).json({
-          success: false,
-          message: response.data.msg || "Insufficient funds",
-          balance: response.data.balance || 0,
-        });
       } else {
-        throw new Error(response.data.msg || "Debit failed");
+        console.error(`[ERROR] Provider returned an error: ${response.data.msg}`);
+        return res.status(response.data.status || 400).json({
+          success: false,
+          message: response.data.msg || "Failed to debit.",
+        });
       }
     } catch (error) {
       console.error("[ERROR] Debit API Error:", error.message);
-      return handleError(res, "Internal server error", 500);
+      return res.status(500).json({
+        success: false,
+        message: "An error occurred while processing the debit.",
+      });
     }
   };
+  
   
 
 // 6. Credit (Win)
