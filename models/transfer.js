@@ -23,7 +23,6 @@ const TransferSchema = new mongoose.Schema({
   transaction_id: {
     type: String,
     unique: true, // Ensures rollback works correctly by matching transaction_id
-    required: true,
   },
   amount: {
     type: Number,
