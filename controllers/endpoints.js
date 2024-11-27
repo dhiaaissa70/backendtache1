@@ -33,19 +33,28 @@ function handleError(res, message, statusCode = 500) {
 
 function generateKeys(params) {
     const sortedParams = Object.keys(params)
-        .sort() // Ensure the keys are sorted alphabetically
-        .reduce((acc, key) => {
-            if (params[key] !== undefined && params[key] !== null) {
-                acc[key] = params[key]; // Include only defined parameters
-            }
-            return acc;
-        }, {});
-
+      .sort() // Alphabetical order
+      .reduce((acc, key) => {
+        if (params[key] !== undefined && params[key] !== null) {
+          acc[key] = params[key]; // Include defined parameters
+        }
+        return acc;
+      }, {});
+  
     const queryString = new URLSearchParams(sortedParams).toString();
-
-    // Hash the sorted query string with the API_SALT
-    return crypto.createHash("sha1").update(process.env.API_SALT + queryString).digest("hex");
-}
+  
+    const generatedKey = crypto
+      .createHash("sha1")
+      .update(API_SALT + queryString)
+      .digest("hex");
+  
+    console.log("[DEBUG] Sorted Params for Key Generation:", sortedParams);
+    console.log("[DEBUG] Query String:", queryString);
+    console.log("[DEBUG] Generated Key:", generatedKey);
+  
+    return generatedKey;
+  }
+  
 
 // 1. Get Game List
 exports.getlist = async (req, res) => {
@@ -254,28 +263,25 @@ exports.getGame = async (req, res) => {
   }
 };
 
-// (Remaining methods unchanged)
+
 // 4. Handle Balance Callback
 exports.getBalance = async (req, res) => {
     try {
       const {
-        callerId, // Caller authentication username
-        callerPassword, // Caller authentication password
-        remote_id, // Unique player id
-        username, // Player username
-        session_id, // Game session ID
-        currency, // Player's currency
-        gamesession_id, // Session ID from the game provider
-        key, // SHA1 validation key
+        callerId,
+        callerPassword,
+        remote_id,
+        username,
+        session_id,
+        currency,
+        gamesession_id,
+        key,
       } = req.query;
   
-      // Validate required fields
-      if (!remote_id || !username || !currency) {
-        console.error("[ERROR] Missing required parameters for balance request.");
-        return res.status(400).json({ status: "400", message: "Missing required parameters." });
-      }
+      // Step 1: Log all incoming parameters
+      console.log("[DEBUG] Incoming Parameters:", req.query);
   
-      // Step 1: Verify the key (recommended for validation)
+      // Step 2: Generate the expected key
       const queryParams = {
         callerId,
         callerPassword,
@@ -284,27 +290,30 @@ exports.getBalance = async (req, res) => {
         session_id,
         currency,
         gamesession_id,
-        action: "balance",
+        action: "balance", // Action must match provider's request
       };
   
-      const expectedKey = generateKeys(queryParams); // Generate the expected key
+      const expectedKey = generateKeys(queryParams);
+  
+      console.log("[DEBUG] Expected Key:", expectedKey);
+      console.log("[DEBUG] Received Key:", key);
+  
       if (expectedKey !== key) {
         console.error("[ERROR] Invalid key for balance request.");
         return res.status(400).json({ status: "400", message: "Invalid key." });
       }
   
-      // Step 2: Fetch the player's balance from the database
-      const user = await User.findOne({ username }); // Find the user by username
+      // Step 3: Fetch user balance
+      const user = await User.findOne({ username });
       if (!user) {
         console.error("[ERROR] Player not found:", username);
         return res.status(404).json({ status: "404", balance: 0, message: "Player not found." });
       }
   
-      // Step 3: Return the player's balance in the required format
-      console.log(`[INFO] Balance request successful for user: ${username}, balance: ${user.balance}`);
+      console.log(`[INFO] Balance request successful. Balance: ${user.balance}`);
       return res.status(200).json({
-        status: "200", // Always return status 200 for success
-        balance: user.balance.toFixed(2), // Balance as a two-decimal number
+        status: "200",
+        balance: user.balance.toFixed(2),
       });
     } catch (error) {
       console.error("[ERROR] Unexpected error in getBalance:", error.message);
@@ -314,6 +323,7 @@ exports.getBalance = async (req, res) => {
       });
     }
   };
+  
   
   // 5. Handle Debit (Bet)
   exports.debit = async (req, res) => {
