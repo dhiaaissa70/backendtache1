@@ -351,17 +351,8 @@ exports.debit = async (req, res) => {
     } = req.query;
   
     if (!username || !remote_id || !session_id || !amount || !provider || !game_id || !transaction_id || !gamesession_id) {
-      console.error("[ERROR] Missing required parameters:", {
-        username,
-        remote_id,
-        session_id,
-        amount,
-        provider,
-        game_id,
-        transaction_id,
-        gamesession_id,
-      });
-      return res.status(400).json({ success: false, message: "Missing required parameters for debit" });
+      console.error("[ERROR] Missing required parameters for debit:", { username, remote_id, session_id, amount, provider, game_id, transaction_id, gamesession_id });
+      return res.status(400).json({ success: false, message: "Missing required parameters for debit." });
     }
   
     try {
@@ -391,14 +382,13 @@ exports.debit = async (req, res) => {
       if (response.data.status === "200") {
         const updatedBalance = parseFloat(response.data.balance).toFixed(2);
   
-        // Fetch the user
         const user = await User.findOne({ username, remote_id });
         if (!user) {
           console.error("[ERROR] User not found for debit.");
           return res.status(404).json({ success: false, message: "User not found." });
         }
   
-        // Save transaction for rollback purposes
+        // Log transaction for rollback
         const newTransfer = new Transfer({
           senderId: user._id,
           type: "debit",
@@ -410,7 +400,7 @@ exports.debit = async (req, res) => {
   
         await newTransfer.save();
   
-        // Update user's balance
+        // Update the user's balance
         user.balance = updatedBalance;
         await user.save();
   
@@ -441,6 +431,7 @@ exports.debit = async (req, res) => {
   
   
   
+  
 
 // 6. Credit (Win)
 exports.credit = async (req, res) => {
@@ -451,29 +442,14 @@ exports.credit = async (req, res) => {
       amount,
       provider,
       game_id,
-      game_id_hash,
       transaction_id,
-      round_id,
-      gameplay_final = 1, // Default to finished
-      is_freeround_bet = false,
-      jackpot_contribution_in_amount = 0,
       gamesession_id,
       currency = "EUR",
     } = req.query;
   
-    // Validate required fields
-    if (
-      !username ||
-      !remote_id ||
-      !session_id ||
-      !amount ||
-      !provider ||
-      !game_id ||
-      !transaction_id ||
-      !gamesession_id
-    ) {
+    if (!username || !remote_id || !session_id || !amount || !provider || !game_id || !transaction_id || !gamesession_id) {
       console.error("[ERROR] Missing required parameters for credit.");
-      return res.status(400).json({ success: false, message: "Missing required parameters for credit" });
+      return res.status(400).json({ success: false, message: "Missing required parameters for credit." });
     }
   
     try {
@@ -487,43 +463,45 @@ exports.credit = async (req, res) => {
         amount: parseFloat(amount).toFixed(2),
         provider,
         game_id,
-        game_id_hash,
         transaction_id,
-        round_id,
-        gameplay_final,
-        is_freeround_bet: is_freeround_bet ? 1 : 0,
-        jackpot_contribution_in_amount: parseFloat(jackpot_contribution_in_amount).toFixed(6),
         gamesession_id,
         currency,
       };
   
-      // Generate authentication key
       params.key = generateKey(params);
   
       console.log("[DEBUG] Credit Request Parameters:", params);
   
-      // Send request to provider API
-      const response = await axios.get(process.env.PROVIDER_API_URL, { params });
+      const response = await axios.get(PROVIDER_API_URL, { params });
   
       console.log("[DEBUG] Provider Response:", response.data);
   
       if (response.data.status === "200") {
         const updatedBalance = parseFloat(response.data.balance).toFixed(2);
   
-        // Update the user's balance in the database
-        const updateResult = await User.updateOne(
-          { remote_id },
-          { $set: { balance: updatedBalance } }
-        );
-  
-        console.log("[DEBUG] Database Update Result:", updateResult);
-  
-        if (updateResult.modifiedCount === 0) {
-          console.error("[ERROR] Failed to update balance in the database.");
-          return res.status(500).json({ success: false, message: "Failed to update balance in the database." });
+        const user = await User.findOne({ username, remote_id });
+        if (!user) {
+          console.error("[ERROR] User not found for credit.");
+          return res.status(404).json({ success: false, message: "User not found." });
         }
   
-        console.log("[INFO] Balance updated successfully in the database:", updatedBalance);
+        // Log transaction for rollback
+        const newTransfer = new Transfer({
+          senderId: user._id,
+          type: "credit",
+          transaction_id,
+          amount: parseFloat(amount),
+          balanceBefore: { sender: user.balance, receiver: null },
+          balanceAfter: { sender: updatedBalance, receiver: null },
+        });
+  
+        await newTransfer.save();
+  
+        // Update the user's balance
+        user.balance = updatedBalance;
+        await user.save();
+  
+        console.log("[INFO] Balance updated successfully:", updatedBalance);
   
         return res.status(200).json({
           success: true,
@@ -547,11 +525,11 @@ exports.credit = async (req, res) => {
   };
   
   
+  
 // 7. Rollback
 exports.rollback = async (req, res) => {
     const { transaction_id } = req.query;
   
-    // Validate the transaction_id
     if (!transaction_id) {
       console.error("[ERROR] Missing transaction_id for rollback.");
       return res.status(400).json({ success: false, message: "Missing transaction_id." });
@@ -560,7 +538,6 @@ exports.rollback = async (req, res) => {
     try {
       console.log("[DEBUG] Rollback request received for transaction_id:", transaction_id);
   
-      // Fetch the original transaction
       const originalTransaction = await Transfer.findOne({ transaction_id });
   
       if (!originalTransaction) {
@@ -568,29 +545,19 @@ exports.rollback = async (req, res) => {
         return res.status(404).json({ success: false, message: "Transaction not found." });
       }
   
-      console.log("[DEBUG] Original Transaction:", originalTransaction);
-  
-      // Fetch the user associated with the transaction
       const user = await User.findById(originalTransaction.senderId || originalTransaction.receiverId);
       if (!user) {
         console.error("[ERROR] User not found for rollback.");
         return res.status(404).json({ success: false, message: "User not found." });
       }
   
-      console.log("[DEBUG] User found for rollback:", user);
-  
-      // Reverse the transaction
       const updatedBalance = originalTransaction.type === "debit"
-        ? user.balance + originalTransaction.amount // Refund for a debit
-        : user.balance - originalTransaction.amount; // Deduction for a credit rollback
+        ? user.balance + originalTransaction.amount
+        : user.balance - originalTransaction.amount;
   
       user.balance = updatedBalance;
-  
-      // Save the updated user balance
       await user.save();
-      console.log(`[INFO] Rollback successful. Updated balance: ${updatedBalance}`);
   
-      // Create a rollback transaction record
       const rollbackTransfer = new Transfer({
         senderId: originalTransaction.senderId,
         receiverId: originalTransaction.receiverId,
@@ -602,7 +569,8 @@ exports.rollback = async (req, res) => {
       });
   
       await rollbackTransfer.save();
-      console.log("[INFO] Rollback transfer record created:", rollbackTransfer);
+  
+      console.log(`[INFO] Rollback successful. Updated balance: ${updatedBalance}`);
   
       return res.status(200).json({
         success: true,
@@ -616,5 +584,6 @@ exports.rollback = async (req, res) => {
       });
     }
   };
+  
   
   
