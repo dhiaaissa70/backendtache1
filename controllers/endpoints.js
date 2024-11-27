@@ -180,79 +180,45 @@ exports.createPlayer = async (req, res) => {
 
 // 4. Get Game
 exports.getGame = async (req, res) => {
-    const {
-      gameid,
-      username,
-      play_for_fun = false,
-      lang = "en",
-      currency = "EUR",
-      homeurl = "https://catch-me.bet", // Home button URL
-    } = req.body;
+    const { gameid, username, play_for_fun = false, lang = "en" } = req.body;
   
     if (!gameid || !username) {
-      return handleError(res, "Game ID and username are required", 400);
+      return res.status(400).json({ status: 400, message: "Game ID and username are required." });
     }
   
     try {
-      // Validate user exists in the database
-      const user = await User.findOne({ username });
-      if (!user) {
-        return handleError(res, "User not found in local database", 404);
-      }
-  
-      // Prepare API payload
       const payload = {
-        api_password: API_PASSWORD,
-        api_login: API_USERNAME,
         method: "getGameDirect",
         gameid,
         user_username: username,
-        user_password: "securePassword123",
-        play_for_fun: play_for_fun ? 1 : 0,
+        user_password: "securePassword123", // Replace with actual password
         lang,
-        currency,
-        homeurl,
+        play_for_fun: play_for_fun ? 1 : 0,
+        homeurl: "https://catch-me.bet",
+        currency: "EUR", // Ensure currency matches the provider's settings
+        api_login: process.env.API_USERNAME,
+        api_password: process.env.API_PASSWORD,
       };
   
-      console.log("[DEBUG] Payload for getGameDirect:", payload);
-  
-      // Call provider API
       const response = await callProviderAPI(payload);
   
       if (response.error === 0) {
-        const { response: gameResponse, gamesession_id, sessionid } = response;
-        
-        // Check if response is an object (embed_code) or string (url)
-        let gameData = {};
-        if (typeof gameResponse === "string") {
-          gameData = {
-            type: "url",
-            value: gameResponse,
-          };
-        } else if (gameResponse.embed_code) {
-          gameData = {
-            type: "embed_code",
-            value: gameResponse.embed_code,
-          };
-        } else {
-          return handleError(res, "Invalid response from provider.", 400);
-        }
-  
-        // Return the game details to the frontend
         return res.status(200).json({
           success: true,
           data: {
-            gameData,
-            gamesession_id,
-            sessionid,
+            gameData: response.response.url
+              ? { type: "url", value: response.response.url }
+              : { type: "embed_code", value: response.response.embed_code },
+            gamesession_id: response.gamesession_id,
+            sessionid: response.sessionid,
           },
         });
       } else {
-        return handleError(res, response.message || "Failed to launch game", 400);
+        return res.status(400).json({ status: 400, message: response.message || "Invalid response from provider." });
       }
-    } catch (error) {
-      console.error("[ERROR] Unexpected error in getGame:", error.message);
-      handleError(res, "An error occurred while fetching the game URL.", 500);
+    } catch (err) {
+      console.error("[ERROR] Failed to fetch game URL:", err.message);
+      return res.status(500).json({ status: 500, message: "Internal server error." });
     }
   };
   
