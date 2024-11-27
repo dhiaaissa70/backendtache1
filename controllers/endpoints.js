@@ -547,6 +547,8 @@ exports.credit = async (req, res) => {
 exports.rollback = async (req, res) => {
     const { transaction_id } = req.query;
   
+    console.log("[DEBUG] Rollback request received:", req.query); // Log incoming request
+  
     if (!transaction_id) {
       console.error("[ERROR] Missing transaction_id for rollback.");
       return res.status(400).json({ success: false, message: "Missing transaction_id." });
@@ -561,7 +563,7 @@ exports.rollback = async (req, res) => {
         return res.status(404).json({ success: false, message: "Transaction not found." });
       }
   
-      // Fetch the user
+      // Fetch the user associated with the transaction
       const user = await User.findById(originalTransaction.senderId || originalTransaction.receiverId);
       if (!user) {
         console.error("[ERROR] User not found for rollback.");
@@ -569,20 +571,26 @@ exports.rollback = async (req, res) => {
       }
   
       // Reverse the transaction
-      const updatedBalance = originalTransaction.type === "debit"
-        ? user.balance + originalTransaction.amount
-        : user.balance - originalTransaction.amount;
+      let updatedBalance;
+      if (originalTransaction.type === "debit") {
+        updatedBalance = user.balance + originalTransaction.amount;
+      } else if (originalTransaction.type === "credit") {
+        updatedBalance = user.balance - originalTransaction.amount;
+      } else {
+        console.error("[ERROR] Invalid transaction type for rollback.");
+        return res.status(400).json({ success: false, message: "Invalid transaction type for rollback." });
+      }
   
       // Update the user's balance
       user.balance = updatedBalance;
       await user.save();
   
-      // Create a rollback transfer record
+      // Create a rollback record
       const rollbackTransfer = new Transfer({
         senderId: originalTransaction.senderId,
         receiverId: originalTransaction.receiverId,
         type: "rollback",
-        transaction_id: `${transaction_id}_rollback`,
+        transaction_id: `${transaction_id}_rollback`, // Unique rollback transaction ID
         amount: originalTransaction.amount,
         balanceBefore: { sender: user.balance, receiver: null },
         balanceAfter: { sender: updatedBalance, receiver: null },
@@ -590,7 +598,7 @@ exports.rollback = async (req, res) => {
   
       await rollbackTransfer.save();
   
-      console.log(`[INFO] Rollback successful. New balance: ${updatedBalance}`);
+      console.log(`[INFO] Rollback successful for transaction ID: ${transaction_id}. New balance: ${updatedBalance}`);
   
       return res.status(200).json({
         success: true,
@@ -604,5 +612,4 @@ exports.rollback = async (req, res) => {
       });
     }
   };
-  
   
