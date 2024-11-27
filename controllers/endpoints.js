@@ -375,6 +375,7 @@ exports.debit = async (req, res) => {
   
       console.log("[DEBUG] Debit Request Parameters:", params);
   
+      // Send the request to the provider
       const response = await axios.get(PROVIDER_API_URL, { params });
   
       console.log("[DEBUG] Provider Response:", response.data);
@@ -388,7 +389,6 @@ exports.debit = async (req, res) => {
           return res.status(404).json({ success: false, message: "User not found." });
         }
   
-        // Log transaction for rollback
         const newTransfer = new Transfer({
           senderId: user._id,
           type: "debit",
@@ -400,7 +400,6 @@ exports.debit = async (req, res) => {
   
         await newTransfer.save();
   
-        // Update the user's balance
         user.balance = updatedBalance;
         await user.save();
   
@@ -419,7 +418,18 @@ exports.debit = async (req, res) => {
         });
       }
     } catch (error) {
-      console.error("[ERROR] Debit API Unexpected Error:", error.message, error.stack);
+      console.error("[ERROR] Debit API Unexpected Error:", error.message);
+      console.error("[DEBUG] Full Error Stack:", error.stack);
+  
+      // Check if it's an Axios error and log additional info
+      if (error.response) {
+        console.error("[DEBUG] Provider Error Response Data:", error.response.data);
+        console.error("[DEBUG] Provider Error Status Code:", error.response.status);
+        console.error("[DEBUG] Provider Error Headers:", error.response.headers);
+      } else if (error.request) {
+        console.error("[DEBUG] No response received from provider. Request details:", error.request);
+      }
+  
       return res.status(500).json({
         success: false,
         message: "An error occurred while processing the debit.",
