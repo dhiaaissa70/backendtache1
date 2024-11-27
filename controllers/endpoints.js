@@ -35,36 +35,31 @@ function handleError(res, message, statusCode = 500) {
  * @param {Object} params - Query parameters to include in the key generation.
  */
 function generateKeys(params) {
-    // Step 1: Sort parameters alphabetically
     const sortedParams = Object.keys(params)
-        .sort()
-        .reduce((acc, key) => {
-            if (params[key] !== undefined && params[key] !== null) {
-                acc[key] = params[key];
-            }
-            return acc;
-        }, {});
-
+      .sort()
+      .reduce((acc, key) => {
+        if (params[key] !== undefined && params[key] !== null) {
+          acc[key] = params[key];
+        }
+        return acc;
+      }, {});
+  
     console.log("[DEBUG] Sorted Params for Key Generation:", sortedParams);
-
-    // Step 2: Build the query string
+  
     const queryString = Object.entries(sortedParams)
-        .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
-        .join("&");
-
+      .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
+      .join("&");
+  
     console.log("[DEBUG] Query String:", queryString);
-
-    // Step 3: Generate the hash input using API_SALT
+  
     const hashInput = API_SALT + queryString;
     console.log("[DEBUG] Hash Input:", hashInput);
-
-    // Step 4: Generate the SHA-1 hash
+  
     const hash = crypto.createHash("sha1").update(hashInput).digest("hex");
     console.log("[DEBUG] Generated Key:", hash);
-
+  
     return hash;
-}
-
+  }
 // 1. Get Game List
 exports.getlist = async (req, res) => {
   const { show_systems = 0, show_additional = false, currency = "EUR" } = req.query;
@@ -180,67 +175,57 @@ exports.createPlayer = async (req, res) => {
 
 // 4. Get Game
 exports.getGame = async (req, res) => {
-    const { gameid, username, play_for_fun = false, lang = "en" } = req.body;
-  
-    if (!gameid || !username) {
-      return res.status(400).json({ status: 400, message: "Game ID and username are required." });
+    const { gameid, username, play_for_fun = false, lang = "en", currency = "EUR" } = req.body;
+
+  if (!gameid || !username) {
+    return res.status(400).json({ success: false, message: "Game ID and username are required." });
+  }
+
+  try {
+    const user = await User.findOne({ username });
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found." });
     }
-  
-    try {
-      const payload = {
-        method: "getGameDirect",
-        gameid,
-        user_username: username,
-        user_password: "securePassword123", // Replace with actual password
-        lang,
-        play_for_fun: play_for_fun ? 1 : 0,
-        homeurl: "https://catch-me.bet",
-        currency: "EUR", // Ensure currency matches the provider's settings
-        api_login: process.env.API_USERNAME,
-        api_password: process.env.API_PASSWORD,
-      };
-  
-      const response = await callProviderAPI(payload);
-  
-      if (response.error === 0) {
-        return res.status(200).json({
-          success: true,
-          data: {
-            gameData: response.response.url
-              ? { type: "url", value: response.response.url }
-              : { type: "embed_code", value: response.response.embed_code },
-            gamesession_id: response.gamesession_id,
-            sessionid: response.sessionid,
-          },
-        });
-      } else {
-        return res.status(400).json({ status: 400, message: response.message || "Invalid response from provider." });
-      }
-    } catch (err) {
-      console.error("[ERROR] Failed to fetch game URL:", err.message);
-      return res.status(500).json({ status: 500, message: "Internal server error." });
+
+    const payload = {
+      api_password: API_PASSWORD,
+      api_login: API_USERNAME,
+      method: "getGameDirect",
+      gameid,
+      user_username: username,
+      user_password: "securePassword123",
+      play_for_fun: play_for_fun ? 1 : 0,
+      lang,
+      currency,
+      homeurl: "https://catch-me.bet",
+    };
+
+    const response = await callProviderAPI(payload);
+
+    if (response.error !== 0) {
+      console.error("[ERROR] Failed to fetch game URL:", response);
+      return res.status(400).json({ success: false, message: response.message || "Failed to fetch game URL." });
     }
-  };
-  
+
+    res.status(200).json({
+      success: true,
+      data: {
+        gameUrl: response.response,
+        gamesession_id: response.gamesession_id,
+        sessionid: response.sessionid,
+      },
+    });
+  } catch (error) {
+    console.error("[ERROR] Unexpected error in getGameDirect:", error.message);
+    res.status(500).json({ success: false, message: "An error occurred while fetching the game URL." });
+  }
+};
 
 // 4. Handle Balance Callback
 exports.getBalance = async (req, res) => {
     try {
-      const {
-        callerId,
-        callerPassword,
-        remote_id,
-        username,
-        session_id,
-        currency,
-        gamesession_id,
-        key,
-      } = req.query;
+      const { callerId, callerPassword, remote_id, username, session_id, currency, gamesession_id, key } = req.query;
   
-      // Step 1: Log all incoming parameters
-      console.log("[DEBUG] Incoming Parameters:", req.query);
-  
-      // Step 2: Generate the expected key
       const queryParams = {
         callerId,
         callerPassword,
@@ -249,37 +234,28 @@ exports.getBalance = async (req, res) => {
         session_id,
         currency,
         gamesession_id,
-        action: "balance", // Action must match provider's request
+        action: "balance",
       };
   
       const expectedKey = generateKeys(queryParams);
-  
-      console.log("[DEBUG] Expected Key:", expectedKey);
-      console.log("[DEBUG] Received Key:", key);
   
       if (expectedKey !== key) {
         console.error("[ERROR] Invalid key for balance request.");
         return res.status(400).json({ status: "400", message: "Invalid key." });
       }
   
-      // Step 3: Fetch user balance
       const user = await User.findOne({ username });
       if (!user) {
-        console.error("[ERROR] Player not found:", username);
         return res.status(404).json({ status: "404", balance: 0, message: "Player not found." });
       }
   
-      console.log(`[INFO] Balance request successful. Balance: ${user.balance}`);
-      return res.status(200).json({
+      res.status(200).json({
         status: "200",
         balance: user.balance.toFixed(2),
       });
     } catch (error) {
       console.error("[ERROR] Unexpected error in getBalance:", error.message);
-      return res.status(500).json({
-        status: "500",
-        message: "Internal server error. Please try again later.",
-      });
+      res.status(500).json({ status: "500", message: "Internal server error." });
     }
   };
   
