@@ -14,35 +14,10 @@ router.post("/player-exists", endpointController.playerExists); // Check if play
 // 4. Route to create a new player
 router.post("/create-player", endpointController.createPlayer); // Create a new player account
 
-// 5. Route to handle balance callback
-router.get("/", endpointController.getBalance); // Respond with user balance
+router.get("/balance", endpointController.getBalance);
+router.get("/debit", endpointController.debit);
+router.get("/credit", endpointController.credit);
+router.get("/rollback", endpointController.rollback);
 
-
-router.get('/', (req, res) => {
-
-    const {action }= req.query;
-    
-    
-    if (action === "rollback") {
-    
-         return endpointController.rollback(req,res);
-    }
-    
-    return " missing";
-    
-    }
-    
-    
-    
-    );
-
-// 6. Route to handle debit (bet) callback
-router.get("/", endpointController.debit); // Deduct bet amount from user's balance
-
-// 7. Route to handle credit (win) callback
-router.get("/", endpointController.credit); // Add win amount to user's balance
-
-// 8. Route to handle rollback callback
-//router.get("/", endpointController.rollback); // Rollback a previous transaction
 
 module.exports = router;
