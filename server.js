@@ -22,7 +22,7 @@ app.get('/', (req, res) => {
 ////
 app.use("/tr",TranferRoute)
 app.use("/auth",AuthRoute)
-app.use("/",EndpointRoute)
+app.use("/api",EndpointRoute)
 
 
 
