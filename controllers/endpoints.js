@@ -30,6 +30,10 @@ function handleError(res, message, statusCode = 500) {
   res.status(statusCode).json({ status: statusCode, message });
 }
 
+/**
+ * Generate the SHA-1 key for authentication.
+ * @param {Object} params - Query parameters to include in the key generation.
+ */
 function generateKeys(params) {
     // Step 1: Sort parameters alphabetically
     const sortedParams = Object.keys(params)
@@ -43,22 +47,23 @@ function generateKeys(params) {
 
     console.log("[DEBUG] Sorted Params for Key Generation:", sortedParams);
 
-    // Step 2: Create query string
+    // Step 2: Build the query string
     const queryString = Object.entries(sortedParams)
         .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
         .join("&");
+
     console.log("[DEBUG] Query String:", queryString);
 
-    // Step 3: Generate SHA1 hash
-    const hashInput = process.env.API_SALT + queryString;
+    // Step 3: Generate the hash input using API_SALT
+    const hashInput = API_SALT + queryString;
     console.log("[DEBUG] Hash Input:", hashInput);
 
+    // Step 4: Generate the SHA-1 hash
     const hash = crypto.createHash("sha1").update(hashInput).digest("hex");
     console.log("[DEBUG] Generated Key:", hash);
 
     return hash;
 }
-
 
 // 1. Get Game List
 exports.getlist = async (req, res) => {
