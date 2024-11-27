@@ -237,9 +237,10 @@ exports.getlist = async (req, res) => {
       const playerExistsResponse = await callProviderAPI(playerExistsPayload);
   
       let remote_id = user.remote_id;
+       //TODO wrong way to check if player exists
       if (!remote_id) {
         console.log(`[DEBUG] No remote_id for user ${username}. Creating player...`);
-  
+ 
         // Create player if `remote_id` is missing
         const createPlayerPayload = {
           api_password: API_PASSWORD,
@@ -390,6 +391,120 @@ exports.debit = async (req, res) => {
       if (response.data.status === "200") {
         const updatedBalance = parseFloat(response.data.balance).toFixed(2);
   
+        // Fetch the user
+        const user = await User.findOne({ username, remote_id });
+        if (!user) {
+          console.error("[ERROR] User not found for debit.");
+          return res.status(404).json({ success: false, message: "User not found." });
+        }
+  
+        // Save transaction for rollback purposes
+        const newTransfer = new Transfer({
+          senderId: user._id,
+          type: "debit",
+          transaction_id,
+          amount: parseFloat(amount),
+          balanceBefore: { sender: user.balance, receiver: null },
+          balanceAfter: { sender: updatedBalance, receiver: null },
+        });
+  
+        await newTransfer.save();
+  
+        // Update user's balance
+        user.balance = updatedBalance;
+        await user.save();
+  
+        console.log("[INFO] Balance updated successfully:", updatedBalance);
+  
+        return res.status(200).json({
+          success: true,
+          balance: updatedBalance,
+          transaction_id: response.data.transaction_id,
+        });
+      } else {
+        console.error(`[ERROR] Provider returned an error: ${response.data.msg || "Unknown error"}`);
+        return res.status(400).json({
+          success: false,
+          message: response.data.msg || "Failed to process debit.",
+        });
+      }
+    } catch (error) {
+      console.error("[ERROR] Debit API Unexpected Error:", error.message, error.stack);
+      return res.status(500).json({
+        success: false,
+        message: "An error occurred while processing the debit.",
+      });
+    }
+  };
+  
+  
+  
+  
+  
+
+// 6. Credit (Win)
+exports.credit = async (req, res) => {
+    const {
+      username,
+      remote_id,
+      session_id,
+      amount,
+      provider,
+      game_id,
+      transaction_id,
+      gamesession_id,
+      currency = "EUR",
+    } = req.query;
+  
+    if (!username || !remote_id || !session_id || !amount || !provider || !game_id || !transaction_id || !gamesession_id) {
+      console.error("[ERROR] Missing required parameters:", {
+        username,
+        remote_id,
+        session_id,
+        amount,
+        provider,
+        game_id,
+        transaction_id,
+        gamesession_id,
+      });
+      return res.status(400).json({ success: false, message: "Missing required parameters for credit" });
+    }
+  
+    try {
+      const params = {
+        callerId: process.env.API_USERNAME,
+        callerPassword: process.env.API_PASSWORD,
+        action: "credit",
+        remote_id,
+        username,
+        session_id,
+        amount: parseFloat(amount).toFixed(2),
+        provider,
+        game_id,
+        transaction_id,
+        gamesession_id,
+        currency,
+      };
+  
+      params.key = generateKey(params);
+  
+      console.log("[DEBUG] Credit Request Parameters:", params);
+  
+      const response = await axios.get(PROVIDER_API_URL, { params });
+  
+      console.log("[DEBUG] Provider Response:", response.data);
+  
+      if (response.data.status === "200") {
+        const updatedBalance = parseFloat(response.data.balance).toFixed(2);
+  
+        // Save transaction for potential rollback
+        await Transfer.create({
+          username,
+          transaction_id,
+          type: "credit",
+          amount,
+        });
+  
         // Update local balance
         const updateResult = await User.updateOne(
           { username, remote_id },
@@ -416,153 +531,78 @@ exports.debit = async (req, res) => {
         console.error(`[ERROR] Provider returned an error: ${response.data.msg || "Unknown error"}`);
         return res.status(400).json({
           success: false,
-          message: response.data.msg || "Failed to process debit.",
+          message: response.data.msg || "Failed to process credit.",
         });
       }
     } catch (error) {
-      console.error("[ERROR] Debit API Unexpected Error:", error.message, error.stack);
+      console.error("[ERROR] Credit API Unexpected Error:", error.message, error.stack);
       return res.status(500).json({
         success: false,
-        message: "An error occurred while processing the debit.",
+        message: "An error occurred while processing the credit.",
+      });
+    }
+  };
+  
+// 7. Rollback
+exports.rollback = async (req, res) => {
+    const { transaction_id } = req.query;
+  
+    if (!transaction_id) {
+      console.error("[ERROR] Missing transaction_id for rollback.");
+      return res.status(400).json({ success: false, message: "Missing transaction_id." });
+    }
+  
+    try {
+      // Fetch the original transaction
+      const originalTransaction = await Transfer.findOne({ transaction_id });
+  
+      if (!originalTransaction) {
+        console.error("[ERROR] Transaction not found for rollback:", transaction_id);
+        return res.status(404).json({ success: false, message: "Transaction not found." });
+      }
+  
+      // Fetch the user
+      const user = await User.findById(originalTransaction.senderId || originalTransaction.receiverId);
+      if (!user) {
+        console.error("[ERROR] User not found for rollback.");
+        return res.status(404).json({ success: false, message: "User not found." });
+      }
+  
+      // Reverse the transaction
+      const updatedBalance = originalTransaction.type === "debit"
+        ? user.balance + originalTransaction.amount
+        : user.balance - originalTransaction.amount;
+  
+      // Update the user's balance
+      user.balance = updatedBalance;
+      await user.save();
+  
+      // Create a rollback transfer record
+      const rollbackTransfer = new Transfer({
+        senderId: originalTransaction.senderId,
+        receiverId: originalTransaction.receiverId,
+        type: "rollback",
+        transaction_id: `${transaction_id}_rollback`,
+        amount: originalTransaction.amount,
+        balanceBefore: { sender: user.balance, receiver: null },
+        balanceAfter: { sender: updatedBalance, receiver: null },
+      });
+  
+      await rollbackTransfer.save();
+  
+      console.log(`[INFO] Rollback successful. New balance: ${updatedBalance}`);
+  
+      return res.status(200).json({
+        success: true,
+        balance: updatedBalance,
+      });
+    } catch (error) {
+      console.error("[ERROR] Rollback API Error:", error.message);
+      return res.status(500).json({
+        success: false,
+        message: "An error occurred while processing the rollback.",
       });
     }
   };
   
   
-  
-
-// 6. Credit (Win)
-exports.credit = async (req, res) => {
-    const {
-      username,
-      remote_id,
-      session_id,
-      amount,
-      provider,
-      game_id,
-      game_id_hash,
-      transaction_id,
-      round_id,
-      gameplay_final = 1, // Default to finished
-      is_freeround_bet = false,
-      jackpot_contribution_in_amount = 0,
-      gamesession_id,
-      currency = "EUR",
-    } = req.query;
-  
-    // Validate required fields
-    if (
-      !username ||
-      !remote_id ||
-      !session_id ||
-      !amount ||
-      !provider ||
-      !game_id ||
-      !transaction_id ||
-      !gamesession_id
-    ) {
-      return handleError(res, "Missing required parameters for credit", 400);
-    }
-  
-    try {
-      const params = {
-        callerId: API_USERNAME,
-        callerPassword: API_PASSWORD,
-        action: "credit",
-        remote_id,
-        username,
-        session_id,
-        amount: parseFloat(amount).toFixed(2),
-        provider,
-        game_id,
-        game_id_hash,
-        transaction_id,
-        round_id,
-        gameplay_final,
-        is_freeround_bet: is_freeround_bet ? 1 : 0,
-        jackpot_contribution_in_amount: parseFloat(jackpot_contribution_in_amount).toFixed(6),
-        gamesession_id,
-        currency,
-      };
-  
-      params.key = generateKey(params); // Generate the authentication key
-  
-      console.log("[DEBUG] Credit Payload:", params);
-  
-      const response = await axios.get(`${PROVIDER_API_URL}`, { params });
-      console.log("[DEBUG] Provider Response:", response.data);
-  
-      if (response.data.status === "200") {
-        const updatedBalance = response.data.balance;
-        await User.updateOne(
-          { username, remote_id },
-          { $set: { balance: updatedBalance } } // Update local balance
-        );
-        console.log("[INFO] Local balance updated successfully.");
-      } else {
-        throw new Error(response.data.msg || "Credit failed");
-      }
-    } catch (error) {
-      console.error("[ERROR] Credit API Error:", error.message);
-      return handleError(res, "Internal server error during credit", 500);
-    }
-  };
-// 7. Rollback
-exports.rollback = async (req, res) => {
-  const {
-    username,
-    remote_id,
-    session_id,
-    amount,
-    provider,
-    game_id,
-    game_id_hash,
-    transaction_id,
-    round_id,
-    gameplay_final,
-    gamesession_id,
-  } = req.query;
-
-  if (
-    !username ||
-    !remote_id ||
-    !session_id ||
-    !amount ||
-    !provider ||
-    !game_id ||
-    !game_id_hash ||
-    !transaction_id ||
-    !round_id ||
-    !gamesession_id
-  ) {
-    return handleError(res, "Missing required parameters", 400);
-  }
-
-  try {
-    const params = {
-      callerId: API_USERNAME,
-      callerPassword: API_PASSWORD,
-      callerPrefix: "700ha",
-      action: "rollback",
-      remote_id,
-      username,
-      session_id,
-      amount,
-      provider,
-      game_id,
-      game_id_hash,
-      transaction_id,
-      round_id,
-      gameplay_final,
-      gamesession_id,
-    };
-
-    const key = generateKey(params);
-    params.key = key;
-
-    const response = await callProviderAPI(params);
-    res.status(200).json(response);
-  } catch (error) {
-    handleError(res, error.message);
-  }
-};

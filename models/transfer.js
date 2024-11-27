@@ -1,40 +1,49 @@
 const mongoose = require("mongoose");
 
 const TransferSchema = new mongoose.Schema({
-    senderId: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User',
-        required: true
+  senderId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: function () {
+      return this.type === 'withdraw'; // Required only for withdrawals
     },
-    receiverId: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User',
-        required: true
+  },
+  receiverId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: function () {
+      return this.type === 'deposit'; // Required only for deposits
     },
-    type: {
-        type: String,
-        enum: ['deposit', 'withdraw', 'debit', 'credit'], // Include debit and credit
-        required: true
-    },
-    amount: {
-        type: Number,
-        required: true
-    },
-    note: {
-        type: String
-    },
-    date: {
-        type: Date,
-        default: Date.now
-    },
-    balanceBefore: {
-        sender: { type: Number, required: true },
-        receiver: { type: Number, required: true }
-    },
-    balanceAfter: {
-        sender: { type: Number, required: true },
-        receiver: { type: Number, required: true }
-    }
+  },
+  type: {
+    type: String,
+    enum: ['deposit', 'withdraw', 'debit', 'credit', 'rollback'], // Include rollback
+    required: true,
+  },
+  transaction_id: {
+    type: String,
+    unique: true, // Ensures rollback works correctly by matching transaction_id
+    required: true,
+  },
+  amount: {
+    type: Number,
+    required: true,
+  },
+  note: {
+    type: String,
+  },
+  date: {
+    type: Date,
+    default: Date.now,
+  },
+  balanceBefore: {
+    sender: { type: Number }, // Nullable if senderId is not applicable
+    receiver: { type: Number }, // Nullable if receiverId is not applicable
+  },
+  balanceAfter: {
+    sender: { type: Number }, // Nullable if senderId is not applicable
+    receiver: { type: Number }, // Nullable if receiverId is not applicable
+  },
 });
 
 const Transfer = mongoose.model('Transfer', TransferSchema);
