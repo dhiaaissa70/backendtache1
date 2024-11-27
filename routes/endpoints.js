@@ -14,10 +14,28 @@ router.post("/player-exists", endpointController.playerExists); // Check if play
 // 4. Route to create a new player
 router.post("/create-player", endpointController.createPlayer); // Create a new player account
 
-router.get("/balance", endpointController.getBalance);
-router.get("/debit", endpointController.debit);
-router.get("/credit", endpointController.credit);
-router.get("/rollback", endpointController.rollback);
+router.get("/", (req, res, next) => {
+    const action = req.query.action;
+  
+    switch (action) {
+      case "balance":
+        return endpointController.getBalance(req, res);
+      case "debit":
+        return endpointController.debit(req, res);
+      case "credit":
+        return endpointController.credit(req, res);
+      case "rollback":
+        return endpointController.rollback(req, res);
+      default:
+        return res.status(404).json({ success: false, message: "Invalid action." });
+    }
+  });
+  
+  // New individual routes
+  router.get("/balance", endpointController.getBalance);
+  router.get("/debit", endpointController.debit);
+  router.get("/credit", endpointController.credit);
+  router.get("/rollback", endpointController.rollback);
 
 
 module.exports = router;
