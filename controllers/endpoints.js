@@ -212,34 +212,30 @@ exports.getlist = async (req, res) => {
   
       const playerExistsResponse = await callProviderAPI(playerExistsPayload);
   
-      if (playerExistsResponse.error !== 0) {
-        console.log(`[DEBUG] Player does not exist. Attempting to create player: ${username}`);
+      let remote_id = user.remote_id;
+      if (!remote_id) {
+        console.log(`[DEBUG] No remote_id for user ${username}. Creating player...`);
   
-        // Step 3: Create the player if they don't exist
+        // Create player if `remote_id` is missing
         const createPlayerPayload = {
           api_password: API_PASSWORD,
           api_login: API_USERNAME,
           method: "createPlayer",
           user_username: username,
-          user_password: username, // Use username as password (only for simplicity in dev/testing)
+          user_password: user.password,
           currency,
         };
   
         const createPlayerResponse = await callProviderAPI(createPlayerPayload);
   
-        if (createPlayerResponse.error !== 0) {
-          if (createPlayerResponse.message.includes("Player already exists")) {
-            console.log(`[DEBUG] Player already exists in the provider system.`);
-          } else {
-            return handleError(
-              res,
-              `Failed to create player: ${createPlayerResponse.message}`,
-              400
-            );
-          }
+        if (createPlayerResponse.error === 0) {
+          remote_id = createPlayerResponse.data.id;
+          user.remote_id = remote_id;
+          await user.save();
+        } else {
+          return handleError(res, "Failed to create player.", 400);
         }
       }
-  
       // Step 4: Fetch the game URL
       const payload = {
         api_password: API_PASSWORD,
@@ -317,45 +313,9 @@ exports.getBalance = async (req, res) => {
 
 // 5. Debit (Bet)
 exports.debit = async (req, res) => {
-  const {
-    username,
-    remote_id,
-    session_id,
-    amount,
-    provider,
-    game_id,
-    game_id_hash,
-    transaction_id,
-    round_id,
-    gameplay_final,
-    is_freeround_bet,
-    jackpot_contribution_in_amount,
-    gamesession_id,
-  } = req.query;
-
-  if (
-    !username ||
-    !remote_id ||
-    !session_id ||
-    !amount ||
-    !provider ||
-    !game_id ||
-    !game_id_hash ||
-    !transaction_id ||
-    !round_id ||
-    !gamesession_id
-  ) {
-    return handleError(res, "Missing required parameters", 400);
-  }
-
-  try {
-    const params = {
-      callerId: API_USERNAME,
-      callerPassword: API_PASSWORD,
-      callerPrefix: "700ha",
-      action: "debit",
-      remote_id,
+    const {
       username,
+      remote_id,
       session_id,
       amount,
       provider,
@@ -364,20 +324,104 @@ exports.debit = async (req, res) => {
       transaction_id,
       round_id,
       gameplay_final,
-      is_freeround_bet,
-      jackpot_contribution_in_amount,
+      is_freeround_bet = false, // Optional
+      jackpot_contribution_in_amount = 0, // Optional
       gamesession_id,
-    };
-
-    const key = generateKey(params);
-    params.key = key;
-
-    const response = await callProviderAPI(params);
-    res.status(200).json(response);
-  } catch (error) {
-    handleError(res, error.message);
-  }
-};
+      currency = "EUR", // Default to EUR
+    } = req.query;
+  
+    // Validate required fields
+    if (
+      !username ||
+      !remote_id ||
+      !session_id ||
+      !amount ||
+      !provider ||
+      !game_id ||
+      !transaction_id ||
+      !round_id ||
+      !gamesession_id
+    ) {
+      return handleError(res, "Missing required parameters", 400);
+    }
+  
+    try {
+      // Prepare the query parameters
+      const params = {
+        callerId: API_USERNAME,
+        callerPassword: API_PASSWORD,
+        action: "debit",
+        remote_id,
+        username,
+        session_id,
+        amount: parseFloat(amount), // Ensure `amount` is a number
+        provider,
+        game_id,
+        game_id_hash,
+        transaction_id,
+        round_id,
+        gameplay_final: gameplay_final ? 1 : 0, // Ensure boolean is sent as 0 or 1
+        is_freeround_bet: is_freeround_bet ? 1 : 0, // Ensure boolean is sent as 0 or 1
+        jackpot_contribution_in_amount: parseFloat(jackpot_contribution_in_amount),
+        gamesession_id,
+        currency,
+      };
+  
+      // Generate the key for authentication
+      const key = generateKey(params);
+      params.key = key;
+  
+      console.log("[DEBUG] Debit Payload:", params);
+  
+      // Send the debit request to the provider
+      const response = await axios.get(`${PROVIDER_API_URL}`, { params });
+  
+      console.log("[DEBUG] Provider Response:", response.data);
+  
+      // Handle provider response
+      if (response.data.status === "200") {
+        // Success: Debit transaction completed
+        console.log(
+          `[INFO] Debit successful for user ${username}. Remaining balance: ${response.data.balance}`
+        );
+        return res.status(200).json({
+          success: true,
+          balance: response.data.balance,
+          transaction_id: response.data.transaction_id,
+        });
+      } else if (response.data.status === "403") {
+        // Insufficient balance or refusal
+        console.error(
+          `[ERROR] Debit refused for user ${username}. Reason: ${response.data.msg}`
+        );
+        return res.status(403).json({
+          success: false,
+          message: response.data.msg || "Debit refused",
+          balance: response.data.balance || 0,
+        });
+      } else if (response.data.status === "500") {
+        // Internal provider error
+        console.error(
+          `[ERROR] Provider internal error for user ${username}. Reason: ${response.data.msg}`
+        );
+        return res.status(500).json({
+          success: false,
+          message: response.data.msg || "Internal provider error",
+        });
+      } else {
+        // Unexpected response
+        console.error(
+          `[ERROR] Unexpected provider response for user ${username}:`,
+          response.data
+        );
+        return handleError(res, "Unexpected provider response", 500);
+      }
+    } catch (error) {
+      console.error("[ERROR] Debit API Error:", error.message);
+      return handleError(res, "Internal server error", 500);
+    }
+  };
+  
 
 // 6. Credit (Win)
 exports.credit = async (req, res) => {
