@@ -15,14 +15,16 @@ router.post("/player-exists", endpointController.playerExists); // Check if play
 router.post("/create-player", endpointController.createPlayer); // Create a new player account
 
 // 5. Route to handle balance callback
-router.get("/balance", endpointController.getBalance); // Respond with user balance
+router.get("/", endpointController.getBalance); // Respond with user balance
+
+
 
 
 // 6. Route to handle debit (bet) callback
-router.get("/debit", endpointController.debit); // Deduct bet amount from user's balance
+router.get("/", endpointController.debit); // Deduct bet amount from user's balance
 
 // 7. Route to handle credit (win) callback
-router.get("/credit", endpointController.credit); // Add win amount to user's balance
+router.get("/", endpointController.credit); // Add win amount to user's balance
 
 // 8. Route to handle rollback callback
 router.get("/rollback", endpointController.rollback); // Rollback a previous transaction
