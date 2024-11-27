@@ -365,6 +365,16 @@ exports.debit = async (req, res) => {
       !transaction_id ||
       !gamesession_id
     ) {
+      console.error("[ERROR] Missing required parameters:", {
+        username,
+        remote_id,
+        session_id,
+        amount,
+        provider,
+        game_id,
+        transaction_id,
+        gamesession_id,
+      });
       return res.status(400).json({
         success: false,
         message: "Missing required parameters for debit",
@@ -372,6 +382,25 @@ exports.debit = async (req, res) => {
     }
   
     try {
+      // Log incoming parameters for debugging
+      console.log("[DEBUG] Incoming Parameters:", {
+        username,
+        remote_id,
+        session_id,
+        amount,
+        provider,
+        game_id,
+        game_id_hash,
+        transaction_id,
+        round_id,
+        gameplay_final,
+        is_freeround_bet,
+        jackpot_contribution_in_amount,
+        gamesession_id,
+        currency,
+      });
+  
+      // Prepare request parameters
       const params = {
         callerId: process.env.API_USERNAME,
         callerPassword: process.env.API_PASSWORD,
@@ -392,31 +421,41 @@ exports.debit = async (req, res) => {
         currency,
       };
   
+      // Log before generating the key
+      console.log("[DEBUG] Parameters Before Key Generation:", params);
+  
       // Generate and attach the key
       params.key = generateKey(params);
   
-      console.log("[DEBUG] Debit API Request Params:", params);
+      // Log the generated key and final parameters
+      console.log("[DEBUG] Generated Key:", params.key);
+      console.log("[DEBUG] Final Request Parameters with Key:", params);
   
-      // Send the request
+      // Send the request to the provider
       const response = await axios.get(PROVIDER_API_URL, { params });
   
+      // Log provider response
       console.log("[DEBUG] Provider Response:", response.data);
   
+      // Handle successful response
       if (response.data.status === "200") {
+        console.log(`[INFO] Debit Successful for Transaction ID: ${transaction_id}`);
         return res.status(200).json({
           success: true,
           balance: response.data.balance,
           transaction_id: response.data.transaction_id,
         });
       } else {
-        console.error(`[ERROR] Provider returned an error: ${response.data.msg}`);
+        console.error(`[ERROR] Provider returned an error: ${response.data.msg || "Unknown error"}`);
         return res.status(response.data.status || 400).json({
           success: false,
           message: response.data.msg || "Failed to debit.",
         });
       }
     } catch (error) {
-      console.error("[ERROR] Debit API Error:", error.message);
+      // Log any unexpected errors
+      console.error("[ERROR] Debit API Unexpected Error:", error.message, error.stack);
+  
       return res.status(500).json({
         success: false,
         message: "An error occurred while processing the debit.",
