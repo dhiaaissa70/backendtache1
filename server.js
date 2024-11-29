@@ -16,9 +16,9 @@ connectDB();
 
 // Middlewares
 app.use(cors({
-  origin: ["https://your-frontend-domain.com"], // Replace with your frontend domain
-  methods: ["GET", "POST", "PUT", "DELETE"],
-  allowedHeaders: ["Content-Type", "Authorization"],
+  origin: ["http://localhost:5173", "https://your-production-frontend.com"], // Allowed origins
+  methods: ["GET", "POST"], // Allowed HTTP methods
+  credentials: true, // Allow cookies if needed
 }));
 app.use(compression());
 app.use(express.json());
