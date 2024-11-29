@@ -203,116 +203,66 @@ exports.getlist = async (req, res) => {
   
 
   // 3. Get Game
-  exports.getGame = async (req, res) => {
-    const {
-      gameid,
-      username,
-      play_for_fun = false,
-      lang = "en",
-      currency = "EUR",
-      homeurl = "https://catch-me.bet", // Replace with your homepage URL
-      cashierurl = "https://catch-me.bet", // Replace with your cashier page URL
-    } = req.body;
+  if (!remote_id) {
+    console.log(`[DEBUG] No remote_id for user ${username}. Checking provider...`);
   
-    if (!gameid || !username) {
-      return handleError(res, "Game ID and username are required", 400);
-    }
+    const playerExistsPayload = {
+      api_password: API_PASSWORD,
+      api_login: API_USERNAME,
+      method: "playerExists",
+      user_username: username,
+      currency,
+    };
   
-    try {
-      // Step 1: Check if user exists in the local database
-      const user = await User.findOne({ username });
-      console.log("[DEBUG] Fetched user from database:", user);
+    const playerExistsResponse = await callProviderAPI(playerExistsPayload);
+    console.log("[DEBUG] playerExists Response:", playerExistsResponse);
   
-      if (!user) {
-        return handleError(res, "User not found in local database", 404);
-      }
+    if (playerExistsResponse.error === 0 && playerExistsResponse.response) {
+      remote_id = playerExistsResponse.response.id;
+      user.remote_id = remote_id;
+      await user.save();
+    } else {
+      console.log(`[DEBUG] Player does not exist in provider. Creating new player...`);
   
-      if (!user.password) {
-        return handleError(res, "User password is missing or invalid.", 400);
-      }
-  
-      // Step 2: Check if the player exists in the provider's system
-      const playerExistsPayload = {
+      const createPlayerPayload = {
         api_password: API_PASSWORD,
         api_login: API_USERNAME,
-        method: "playerExists",
+        method: "createPlayer",
         user_username: username,
+        user_password: user.password,
         currency,
       };
   
-      console.log("[DEBUG] Checking player existence with payload:", playerExistsPayload);
-      const playerExistsResponse = await callProviderAPI(playerExistsPayload);
-      console.log("[DEBUG] playerExists Response:", playerExistsResponse);
+      console.log("[DEBUG] Creating player with payload:", createPlayerPayload);
+      const createPlayerResponse = await callProviderAPI(createPlayerPayload);
   
-      let remote_id = user.remote_id;
+      if (createPlayerResponse.error === 0 && createPlayerResponse.response) {
+        remote_id = createPlayerResponse.response.id;
+        user.remote_id = remote_id;
+        await user.save();
+      } else if (
+        createPlayerResponse.error === 1 &&
+        createPlayerResponse.message.includes("Player already exists")
+      ) {
+        console.log("[DEBUG] Handling existing player...");
+        const retryPlayerExistsResponse = await callProviderAPI(playerExistsPayload);
   
-      if (!remote_id) {
-        console.log(`[DEBUG] No remote_id for user ${username}. Creating player...`);
-  
-        // Create player if `remote_id` is missing
-        const createPlayerPayload = {
-          api_password: API_PASSWORD,
-          api_login: API_USERNAME,
-          method: "createPlayer",
-          user_username: username,
-          user_password: user.password,
-          currency,
-        };
-  
-        console.log("[DEBUG] Creating player with payload:", createPlayerPayload);
-        const createPlayerResponse = await callProviderAPI(createPlayerPayload);
-  
-        if (createPlayerResponse.error === 0) {
-          remote_id = createPlayerResponse.response.id;
+        if (retryPlayerExistsResponse.error === 0 && retryPlayerExistsResponse.response) {
+          remote_id = retryPlayerExistsResponse.response.id;
           user.remote_id = remote_id;
           await user.save();
         } else {
-          console.error("[DEBUG] Failed to create player. Provider Response:", createPlayerResponse);
-          return handleError(res, createPlayerResponse.message || "Failed to create player.", 400);
+          return handleError(
+            res,
+            "Failed to retrieve existing player data after createPlayer.",
+            400
+          );
         }
-      }
-  
-      // Step 4: Fetch the game URL
-      const payload = {
-        api_password: API_PASSWORD,
-        api_login: API_USERNAME,
-        method: "getGame",
-        gameid,
-        user_username: username,
-        user_password: username,
-        play_for_fun: !!play_for_fun,
-        lang,
-        currency,
-        homeurl,
-        cashierurl,
-      };
-  
-      console.log("[DEBUG] Fetching game with payload:", payload);
-      const response = await callProviderAPI(payload);
-  
-      if (response.error === 0) {
-        const queryKey = generateKey(payload);
-        const gameUrl = `${response.response}&key=${queryKey}`;
-  
-        const { gamesession_id, sessionid } = response;
-        console.log(`[DEBUG] Game session: ${gamesession_id}, Player session: ${sessionid}`);
-  
-        return res.status(200).json({
-          success: true,
-          data: {
-            gameUrl,
-            gamesession_id,
-            sessionid,
-          },
-        });
       } else {
-        return handleError(res, response.message || "Failed to fetch game URL", 400);
+        return handleError(res, createPlayerResponse.message || "Failed to create player.", 400);
       }
-    } catch (error) {
-      console.error(`[ERROR] Unexpected error in getGame: ${error.message}`);
-      return handleError(res, "An error occurred while fetching the game URL.", 500);
     }
-  };
+  }
   
 
 // 4. Get Balance
