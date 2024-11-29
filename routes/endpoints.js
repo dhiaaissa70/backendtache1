@@ -4,7 +4,7 @@ const crypto = require("crypto");
 const endpointController = require("../controllers/endpoints"); // Controller containing logic
 
 // 1. Route to retrieve the game list
-router.post("/getlist", endpointController.getlist); // Fetch list of available games
+router.post("/getlist", endpointController.getlistgame); // Fetch list of available games
 
 // 2. Route to retrieve a specific game session
 router.post("/get-game", endpointController.getGame); // Retrieve game launch URL and session
