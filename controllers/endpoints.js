@@ -203,66 +203,98 @@ exports.getlist = async (req, res) => {
   
 
   // 3. Get Game
-  if (!remote_id) {
-    console.log(`[DEBUG] No remote_id for user ${username}. Checking provider...`);
+  exports.getGame = async (req, res) => {
+    try {
+      const {
+        gameid,
+        username,
+        play_for_fun = false,
+        lang = "en",
+        currency = "EUR",
+        homeurl = "https://catch-me.bet",
+        cashierurl = "https://catch-me.bet",
+      } = req.body;
   
-    const playerExistsPayload = {
-      api_password: API_PASSWORD,
-      api_login: API_USERNAME,
-      method: "playerExists",
-      user_username: username,
-      currency,
-    };
+      if (!gameid || !username) {
+        return res.status(400).json({ status: 400, message: "Game ID and username are required" });
+      }
   
-    const playerExistsResponse = await callProviderAPI(playerExistsPayload);
-    console.log("[DEBUG] playerExists Response:", playerExistsResponse);
+      const user = await User.findOne({ username });
+      if (!user) {
+        return res.status(404).json({ status: 404, message: "User not found" });
+      }
   
-    if (playerExistsResponse.error === 0 && playerExistsResponse.response) {
-      remote_id = playerExistsResponse.response.id;
-      user.remote_id = remote_id;
-      await user.save();
-    } else {
-      console.log(`[DEBUG] Player does not exist in provider. Creating new player...`);
+      let remote_id = user.remote_id;
   
-      const createPlayerPayload = {
-        api_password: API_PASSWORD,
-        api_login: API_USERNAME,
-        method: "createPlayer",
-        user_username: username,
-        user_password: user.password,
-        currency,
-      };
+      if (!remote_id) {
+        const playerExistsPayload = {
+          api_password: API_PASSWORD,
+          api_login: API_USERNAME,
+          method: "playerExists",
+          user_username: username,
+          currency,
+        };
   
-      console.log("[DEBUG] Creating player with payload:", createPlayerPayload);
-      const createPlayerResponse = await callProviderAPI(createPlayerPayload);
-  
-      if (createPlayerResponse.error === 0 && createPlayerResponse.response) {
-        remote_id = createPlayerResponse.response.id;
-        user.remote_id = remote_id;
-        await user.save();
-      } else if (
-        createPlayerResponse.error === 1 &&
-        createPlayerResponse.message.includes("Player already exists")
-      ) {
-        console.log("[DEBUG] Handling existing player...");
-        const retryPlayerExistsResponse = await callProviderAPI(playerExistsPayload);
-  
-        if (retryPlayerExistsResponse.error === 0 && retryPlayerExistsResponse.response) {
-          remote_id = retryPlayerExistsResponse.response.id;
+        const playerExistsResponse = await callProviderAPI(playerExistsPayload);
+        if (playerExistsResponse.error === 0) {
+          remote_id = playerExistsResponse.response.id;
           user.remote_id = remote_id;
           await user.save();
         } else {
-          return handleError(
-            res,
-            "Failed to retrieve existing player data after createPlayer.",
-            400
-          );
+          const createPlayerPayload = {
+            api_password: API_PASSWORD,
+            api_login: API_USERNAME,
+            method: "createPlayer",
+            user_username: username,
+            user_password: user.password,
+            currency,
+          };
+  
+          const createPlayerResponse = await callProviderAPI(createPlayerPayload);
+          if (createPlayerResponse.error === 0) {
+            remote_id = createPlayerResponse.response.id;
+            user.remote_id = remote_id;
+            await user.save();
+          } else {
+            return res.status(400).json({ status: 400, message: createPlayerResponse.message });
+          }
         }
-      } else {
-        return handleError(res, createPlayerResponse.message || "Failed to create player.", 400);
       }
+  
+      const payload = {
+        api_password: API_PASSWORD,
+        api_login: API_USERNAME,
+        method: "getGame",
+        gameid,
+        user_username: username,
+        user_password: username,
+        play_for_fun: !!play_for_fun,
+        lang,
+        currency,
+        homeurl,
+        cashierurl,
+      };
+  
+      const response = await callProviderAPI(payload);
+      if (response.error === 0) {
+        const queryKey = generateKey(payload);
+        const gameUrl = `${response.response}&key=${queryKey}`;
+        return res.status(200).json({
+          success: true,
+          data: {
+            gameUrl,
+            gamesession_id: response.gamesession_id,
+            sessionid: response.sessionid,
+          },
+        });
+      } else {
+        return res.status(400).json({ status: 400, message: response.message });
+      }
+    } catch (error) {
+      console.error("[ERROR] getGame:", error.message);
+      res.status(500).json({ status: 500, message: "Internal server error" });
     }
-  }
+  };
   
 
 // 4. Get Balance
