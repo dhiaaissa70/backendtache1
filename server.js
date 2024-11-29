@@ -1,45 +1,32 @@
-const express = require("express");
-const cors = require("cors");
+const express = require('express');
+const cors = require('cors'); 
 const connectDB = require("./config/db");
-const Redis = require("ioredis");
-require("dotenv").config();
-
+require('dotenv').config(); // Load environment variables
 const app = express();
 const port = 3001;
-
-// Initialize Redis client
-const redis = new Redis();
-
-redis.on("connect", () => {
-  console.log("Connected to Redis!");
-});
-
-redis.on("error", (err) => {
-  console.error("Redis error:", err);
-});
-
-// Middleware
-app.use(cors());
-app.use(express.json());
-
-// Routes
 const AuthRoute = require("./routes/auth");
-const TransferRoute = require("./routes/transfer");
-const EndpointRoute = require("./routes/endpoints");
+const TranferRoute = require("./routes/transfer");
+const EndpointRoute = require("./routes/endpoints")
 
 connectDB();
 
-app.get("/", (req, res) => {
-  res.send("Server is running...");
+app.use(cors());
+app.use(express.json());
+
+// Route de base
+app.get('/', (req, res) => {
+  res.send('le serveur est en marche');
 });
 
-app.use("/tr", TransferRoute);
-app.use("/auth", AuthRoute);
-app.use("/api", EndpointRoute);
 
-// Start the server
+////
+app.use("/tr",TranferRoute)
+app.use("/auth",AuthRoute)
+app.use("/api",EndpointRoute)
+
+
+
+// Démarrer le serveur
 app.listen(port, () => {
-  console.log(`Server running at http://localhost:${port}`);
+  console.log(`Serveur en cours d'exécution à http://localhost:${port}`);
 });
-
-module.exports = redis; // Export Redis for reuse
