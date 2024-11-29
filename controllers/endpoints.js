@@ -2,6 +2,8 @@ const axios = require("axios");
 const crypto = require("crypto");
 const User = require("../models/User");
 const Transfer = require("../models/transfer");
+const redis = require("../server"); // Import Redis client
+
 
 const API_PASSWORD = process.env.API_PASSWORD;
 const API_USERNAME = process.env.API_USERNAME;
@@ -175,14 +177,14 @@ exports.getlist = async (req, res) => {
         currency,
       };
   
-      console.log("[DEBUG] Fetching game list with payload:", payload);
+ 
   
       // Call Provider API
       const response = await callProviderAPI(payload);
   
       if (response.error !== 0) {
         // Handle provider-side errors
-        console.error(`[ERROR] Failed to fetch game list. Details:`, response);
+      
         return handleError(
           res,
           `Failed to fetch game list from provider: ${response.message || "Unknown error"}`,
@@ -218,14 +220,27 @@ exports.getlist = async (req, res) => {
       return handleError(res, "Game ID and username are required", 400);
     }
   
+    // Define a unique cache key for this game URL based on gameid and username
+    const cacheKey = `game_url_${gameid}_${username}`;
+  
     try {
-      // Step 1: Check if user exists in the local database
+      // Step 1: Check if the game URL is cached in Redis
+      const cachedGameUrl = await redis.get(cacheKey);
+      if (cachedGameUrl) {
+        console.log(`[CACHE HIT] Game URL fetched from Redis for gameid: ${gameid}, username: ${username}`);
+        return res.status(200).json({
+          success: true,
+          data: { gameUrl: cachedGameUrl },
+        });
+      }
+  
+      // Step 2: Check if the user exists in the local database
       const user = await User.findOne({ username });
       if (!user) {
         return handleError(res, "User not found in local database", 404);
       }
   
-      // Step 2: Check if the player exists in the provider's system
+      // Step 3: Check if the player exists in the provider's system
       const playerExistsPayload = {
         api_password: API_PASSWORD,
         api_login: API_USERNAME,
@@ -237,11 +252,11 @@ exports.getlist = async (req, res) => {
       const playerExistsResponse = await callProviderAPI(playerExistsPayload);
   
       let remote_id = user.remote_id;
-       //TODO wrong way to check if player exists
+  
+      // Step 4: If the player doesn't exist, create the player
       if (!remote_id) {
         console.log(`[DEBUG] No remote_id for user ${username}. Creating player...`);
- 
-        // Create player if `remote_id` is missing
+  
         const createPlayerPayload = {
           api_password: API_PASSWORD,
           api_login: API_USERNAME,
@@ -261,7 +276,8 @@ exports.getlist = async (req, res) => {
           return handleError(res, "Failed to create player.", 400);
         }
       }
-      // Step 4: Fetch the game URL
+  
+      // Step 5: Fetch the game URL
       const payload = {
         api_password: API_PASSWORD,
         api_login: API_USERNAME,
@@ -282,16 +298,16 @@ exports.getlist = async (req, res) => {
         const queryKey = generateKey(payload);
         const gameUrl = `${response.response}&key=${queryKey}`;
   
-        // Provide game session tracking details (optional for debug)
-        const { gamesession_id, sessionid } = response;
-        console.log(`[DEBUG] Game session: ${gamesession_id}, Player session: ${sessionid}`);
+        // Cache the game URL in Redis for 10 minutes
+        await redis.set(cacheKey, gameUrl, "EX", 600); // Cache expires in 600 seconds (10 minutes)
   
+        console.log(`[DEBUG] Game URL cached in Redis for gameid: ${gameid}, username: ${username}`);
         res.status(200).json({
           success: true,
           data: {
             gameUrl,
-            gamesession_id,
-            sessionid,
+            gamesession_id: response.gamesession_id,
+            sessionid: response.sessionid,
           },
         });
       } else {
@@ -302,6 +318,7 @@ exports.getlist = async (req, res) => {
       handleError(res, "An error occurred while fetching the game URL.", 500);
     }
   };
+  
 
 // 4. Get Balance
 exports.getBalance = async (req, res) => {
