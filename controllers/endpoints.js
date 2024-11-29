@@ -3,6 +3,7 @@ const crypto = require("crypto");
 const User = require("../models/User");
 const Transfer = require("../models/transfer");
 const bcrypt = require("bcrypt");
+const redisClient = require('./redisClient'); // Import or initialize your Redis client
 
 
 const API_PASSWORD = process.env.API_PASSWORD;
@@ -177,9 +178,23 @@ async function callProviderAPI(payload) {
       handleError(res, "Internal server error.", 500);
     }
   };
+
+
+
   
   
-  
+  const getFromCache = async (key) => {
+  return new Promise((resolve, reject) => {
+    redisClient.get(key, (err, data) => {
+      if (err) {
+        console.error(`[ERROR] Redis Get Error: ${err.message}`);
+        reject(err);
+      } else {
+        resolve(data ? JSON.parse(data) : null);
+      }
+    });
+  });
+};
 
  // Route to fetch game list
  exports.getlist = async (req, res) => {
