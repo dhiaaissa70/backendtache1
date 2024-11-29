@@ -3,8 +3,8 @@ const crypto = require("crypto");
 const bcrypt = require("bcrypt");
 const User = require("../models/User");
 const Transfer = require("../models/transfer");
-const redisClient = require("./redisClient"); // Import your Redis client
-const { getFromCache, setToCache } = require("./redisHelpers");
+const { getFromCache, setToCache } = require('../helpers/cashs');
+
 
 // Environment Variables
 const API_PASSWORD = process.env.API_PASSWORD;
@@ -156,47 +156,46 @@ exports.createPlayer = async (req, res) => {
 
 // 3. Fetch Game List
 exports.getlistgame = async (req, res) => {
-  const { show_systems = 0, show_additional = false, currency = "EUR" } = req.query;
+  const { show_systems = 0, show_additional = false, currency = 'EUR' } = req.query;
 
   const cacheKey = `game_list_${currency}_${show_systems}_${show_additional}`;
 
   try {
+    // Check cache first
     const cachedResponse = await getFromCache(cacheKey);
     if (cachedResponse) {
-      console.log("[DEBUG] Returning cached game list.");
+      console.log('[DEBUG] Returning cached game list.');
       return res.status(200).json({ success: true, data: cachedResponse });
     }
 
+    // Call provider API if cache miss
     const payload = {
-      api_password: API_PASSWORD,
-      api_login: API_USERNAME,
-      method: "getGameList",
+      api_password: process.env.API_PASSWORD,
+      api_login: process.env.API_USERNAME,
+      method: 'getGameList',
       show_systems: show_systems == 1 ? 1 : 0,
-      show_additional: show_additional === "true" || show_additional === true,
+      show_additional: show_additional === 'true' || show_additional === true,
       currency,
     };
+
+    console.log('[DEBUG] Fetching game list with payload:', payload);
 
     const response = await callProviderAPI(payload);
 
     if (response.error !== 0) {
-      console.error("[ERROR] Failed to fetch game list from provider:", response);
-      return res.status(500).json({ success: false, message: "Failed to fetch game list from provider." });
+      console.error('[ERROR] Failed to fetch game list from provider:', response);
+      return res.status(500).json({ success: false, message: 'Failed to fetch game list.' });
     }
 
-    await setToCache(cacheKey, response.response);
+    // Cache the response
+    await setToCache(cacheKey, response.response, 3600); // Cache for 1 hour
 
     res.status(200).json({ success: true, data: response.response });
   } catch (error) {
-    console.error("[ERROR] General Error in getlistgame:", error.message);
-    res.status(500).json({ success: false, message: "An error occurred while fetching the game list." });
+    console.error('[ERROR] Failed to fetch game list:', error.message);
+    res.status(500).json({ success: false, message: 'Internal server error.' });
   }
 };
-
-// (Optional) Save Game Images
-async function saveImageLocally(imageUrl) {
-  console.log("[DEBUG] Saving image:", imageUrl);
-  // Implement logic to save images locally (e.g., using `fs` or `axios` to download).
-}
 
 
 

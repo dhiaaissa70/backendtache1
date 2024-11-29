@@ -3,3 +3,7 @@ node_modules/
 
 # Exclure le fichier .env
 .env
+
+
+cache.json
+
