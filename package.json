@@ -2,6 +2,7 @@
   "dependencies": {
     "axios": "^1.7.7",
     "bcrypt": "^5.1.1",
+    "compression": "^1.7.5",
     "cors": "^2.8.5",
     "crypt": "^0.0.2",
     "crypto": "^1.0.1",

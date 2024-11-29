@@ -158,48 +158,46 @@ async function callProviderAPI(payload) {
   
 
  // Route to fetch game list
-exports.getlist = async (req, res) => {
-    const { show_systems = 0, show_additional = false, currency = "EUR" } = req.query;
-  
-    try {
-      // Validate and normalize input
-      const normalizedShowSystems = show_systems == 1 ? 1 : 0; // Only accept 0 or 1
-      const normalizedShowAdditional = show_additional === "true" || show_additional === true; // Accept boolean or "true"
-  
-      const payload = {
-        api_password: API_PASSWORD,
-        api_login: API_USERNAME,
-        method: "getGameList",
-        show_systems: normalizedShowSystems,
-        show_additional: normalizedShowAdditional,
-        currency,
-      };
-  
-      console.log("[DEBUG] Fetching game list with payload:", payload);
-  
-      // Call Provider API
-      const response = await callProviderAPI(payload);
-  
-      if (response.error !== 0) {
-        // Handle provider-side errors
-        console.error(`[ERROR] Failed to fetch game list. Details:`, response);
-        return handleError(
-          res,
-          `Failed to fetch game list from provider: ${response.message || "Unknown error"}`,
-          500
-        );
-      }
-  
-      // Successful Response
-      console.log("[DEBUG] Game list fetched successfully:", response.response);
-      res.status(200).json({ success: true, data: response.response });
-    } catch (error) {
-      // Handle unexpected errors
-      console.error("[ERROR] Unexpected error fetching game list:", error.message);
-      handleError(res, "Error fetching game list.", 500);
-    }
-  };
-  
+ let cachedGameList = null;
+ let cacheExpiry = null;
+ 
+ exports.getlist = async (req, res) => {
+   const CACHE_DURATION_MS = 10 * 60 * 1000; // Cache for 10 minutes
+   const { show_systems = 0, show_additional = false, currency = "EUR" } = req.query;
+ 
+   if (cachedGameList && Date.now() < cacheExpiry) {
+     console.log("[DEBUG] Serving cached game list.");
+     return res.status(200).json({ success: true, data: cachedGameList });
+   }
+ 
+   try {
+     const payload = {
+       api_password: API_PASSWORD,
+       api_login: API_USERNAME,
+       method: "getGameList",
+       show_systems: show_systems == 1 ? 1 : 0,
+       show_additional: show_additional === "true" || show_additional === true,
+       currency,
+     };
+ 
+     console.log("[DEBUG] Fetching game list with payload:", payload);
+ 
+     const response = await callProviderAPI(payload);
+ 
+     if (response.error !== 0) {
+       return res.status(500).json({ success: false, message: response.message || "Failed to fetch game list" });
+     }
+ 
+     cachedGameList = response.response; // Cache the response
+     cacheExpiry = Date.now() + CACHE_DURATION_MS;
+ 
+     res.status(200).json({ success: true, data: cachedGameList });
+   } catch (error) {
+     console.error("[ERROR] Unexpected error fetching game list:", error.message);
+     res.status(500).json({ success: false, message: "An error occurred while fetching the game list." });
+   }
+ };
+ 
   
 
   // 3. Get Game
