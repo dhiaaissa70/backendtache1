@@ -2,6 +2,7 @@ const axios = require("axios");
 const crypto = require("crypto");
 const User = require("../models/User");
 const Transfer = require("../models/transfer");
+const GameImage = require("../models/GameImage"); // Import the GameImage model
 
 const API_PASSWORD = process.env.API_PASSWORD;
 const API_USERNAME = process.env.API_USERNAME;
@@ -157,47 +158,77 @@ async function callProviderAPI(payload) {
   
   
 
- // Route to fetch game list
- let cachedGameList = null;
- let cacheExpiry = null;
- 
- exports.getlist = async (req, res) => {
-   const CACHE_DURATION_MS = 10 * 60 * 1000; // Cache for 10 minutes
-   const { show_systems = 0, show_additional = false, currency = "EUR" } = req.query;
- 
-   if (cachedGameList && Date.now() < cacheExpiry) {
-     console.log("[DEBUG] Serving cached game list.");
-     return res.status(200).json({ success: true, data: cachedGameList });
-   }
- 
-   try {
-     const payload = {
-       api_password: API_PASSWORD,
-       api_login: API_USERNAME,
-       method: "getGameList",
-       show_systems: show_systems == 1 ? 1 : 0,
-       show_additional: show_additional === "true" || show_additional === true,
-       currency,
-     };
- 
-     console.log("[DEBUG] Fetching game list with payload:", payload);
- 
-     const response = await callProviderAPI(payload);
- 
-     if (response.error !== 0) {
-       return res.status(500).json({ success: false, message: response.message || "Failed to fetch game list" });
-     }
- 
-     cachedGameList = response.response; // Cache the response
-     cacheExpiry = Date.now() + CACHE_DURATION_MS;
- 
-     res.status(200).json({ success: true, data: cachedGameList });
-   } catch (error) {
-     console.error("[ERROR] Unexpected error fetching game list:", error.message);
-     res.status(500).json({ success: false, message: "An error occurred while fetching the game list." });
-   }
- };
- 
+  let cachedGameList = null;
+  let cacheExpiry = null;
+  
+  exports.getlist = async (req, res) => {
+    const CACHE_DURATION_MS = 10 * 60 * 1000; // Cache for 10 minutes
+    const { show_systems = 0, show_additional = false, currency = "EUR" } = req.query;
+  
+    if (cachedGameList && Date.now() < cacheExpiry) {
+      console.log("[DEBUG] Serving cached game list.");
+      return res.status(200).json({ success: true, data: cachedGameList });
+    }
+  
+    try {
+      const payload = {
+        api_password: API_PASSWORD,
+        api_login: API_USERNAME,
+        method: "getGameList",
+        show_systems: show_systems == 1 ? 1 : 0,
+        show_additional: show_additional === "true" || show_additional === true,
+        currency,
+      };
+  
+      console.log("[DEBUG] Fetching game list with payload:", payload);
+  
+      const response = await callProviderAPI(payload);
+  
+      if (response.error !== 0) {
+        console.error("[ERROR] Failed to fetch game list:", response.message);
+        return res
+          .status(500)
+          .json({ success: false, message: response.message || "Failed to fetch game list" });
+      }
+  
+      cachedGameList = response.response; // Cache the response
+      cacheExpiry = Date.now() + CACHE_DURATION_MS;
+  
+      console.log("[DEBUG] Successfully fetched game list.");
+  
+      // Save games to database
+      await saveGamesToDatabase(cachedGameList);
+  
+      res.status(200).json({ success: true, data: cachedGameList });
+    } catch (error) {
+      console.error("[ERROR] Unexpected error fetching game list:", error.message);
+      res.status(500).json({ success: false, message: "An error occurred while fetching the game list." });
+    }
+  };
+  
+  // Helper function to save game metadata to the database
+  async function saveGamesToDatabase(gameList) {
+    try {
+      for (const game of gameList) {
+        if (game.image) {
+          // Upsert game metadata: insert if it doesn't exist, update if it does
+          await GameImage.findOneAndUpdate(
+            { gameId: game.id }, // Query to find the game by ID
+            {
+              gameId: game.id,
+              name: game.name,
+              category: game.category,
+              imageUrl: game.image,
+            },
+            { upsert: true, new: true } // Create a new document if it doesn't exist
+          );
+          console.log(`[DEBUG] Saved game: ${game.id} - ${game.name}`);
+        }
+      }
+    } catch (error) {
+      console.error("[ERROR] Failed to save games to database:", error.message);
+    }
+  }
   
 
   // 3. Get Game
