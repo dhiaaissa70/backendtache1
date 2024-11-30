@@ -353,7 +353,7 @@ async function callProviderAPI(payload) {
     try {
       // Fetch all games from the database
       const games = await GameImage.find()
-        .select("-_id gameId name category imageUrl"); // Exclude internal fields if not needed
+        .select("-_id gameId name category type release_date imageUrl"); // Ensure required fields are included
   
       // Respond with the entire dataset
       res.status(200).json({ success: true, data: games });
@@ -362,6 +362,7 @@ async function callProviderAPI(payload) {
       res.status(500).json({ success: false, message: "Failed to fetch all games from the database." });
     }
   };
+  
   
 
 // 4. Get Balance
