@@ -14,12 +14,17 @@ const EndpointRoute = require("./routes/endpoints");
 // Connect to the database
 connectDB();
 
+// Enable 'trust proxy' for proper IP detection
+app.set("trust proxy", 1); // Required for environments like Render, Heroku, etc.
+
 // Middlewares
-app.use(cors({
-  origin: ["http://localhost:5173", "https://your-production-frontend.com"], // Allowed origins
-  methods: ["GET", "POST"], // Allowed HTTP methods
-  credentials: true, // Allow cookies if needed
-}));
+app.use(
+  cors({
+    origin: ["http://localhost:5173", "https://your-production-frontend.com"], // Allowed origins
+    methods: ["GET", "POST"], // Allowed HTTP methods
+    credentials: true, // Allow cookies if needed
+  })
+);
 app.use(compression());
 app.use(express.json());
 
@@ -27,6 +32,8 @@ app.use(express.json());
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 100, // Limit each IP to 100 requests per window
+  standardHeaders: true, // Send rate limit info in `RateLimit-*` headers
+  legacyHeaders: false, // Disable `X-RateLimit-*` headers
   message: { success: false, message: "Too many requests, please try again later." },
 });
 app.use("/api", apiLimiter);
