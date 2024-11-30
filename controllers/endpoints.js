@@ -327,6 +327,26 @@ async function callProviderAPI(payload) {
   };
   
 
+  exports.getGameListFromDatabase = async (req, res) => {
+    const { category, limit = 30, offset = 0 } = req.query;
+  
+    try {
+      // Build query for specific category if provided
+      const query = category ? { category } : {};
+  
+      // Fetch games from the database with pagination
+      const games = await GameImage.find(query)
+        .skip(parseInt(offset))
+        .limit(parseInt(limit))
+        .select("-_id gameId name category imageUrl"); // Exclude internal fields
+  
+      res.status(200).json({ success: true, data: games });
+    } catch (error) {
+      console.error("[ERROR] Fetching games from database:", error.message);
+      res.status(500).json({ success: false, message: "Failed to fetch games from the database." });
+    }
+  };
+
 // 4. Get Balance
 exports.getBalance = async (req, res) => {
   const { remote_id, session_id, currency, username } = req.query;

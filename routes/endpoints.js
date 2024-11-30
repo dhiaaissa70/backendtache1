@@ -4,6 +4,8 @@ const endpointController = require("../controllers/endpoints"); // Controller co
 
 // 1. Route to retrieve the game list
 router.post("/getlist", endpointController.getlist); // Fetch list of available games
+router.get("/gamesLocal", endpointController.getGameListFromDatabase); // Fetch list of available games from local DB
+
 
 // 2. Route to retrieve a specific game session
 router.post("/get-game", endpointController.getGame); // Retrieve game launch URL and session
