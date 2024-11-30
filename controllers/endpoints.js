@@ -330,7 +330,7 @@ async function callProviderAPI(payload) {
   
 
   exports.getGameListFromDatabase = async (req, res) => {
-    const { limit = 30, offset = 0, ...filters } = req.query; // Spread operator for dynamic filters
+    const { limit = 30, offset = 0, ...filters } = req.query; 
   
     try {
       // Apply dynamic filters (e.g., category, type)
