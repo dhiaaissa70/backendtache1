@@ -211,18 +211,18 @@ async function callProviderAPI(payload) {
     try {
       for (const game of gameList) {
         if (game.image) {
-          // Check if the game already exists in the database and upsert it
+          // Upsert game metadata: insert if it doesn't exist, update if it does
           await GameImage.findOneAndUpdate(
-            { gameId: game.id }, // Query by unique game ID
+            { gameId: game.id }, // Query to find the game by ID
             {
               gameId: game.id,
               name: game.name,
               category: game.category,
               imageUrl: game.image,
             },
-            { upsert: true, new: true } // Insert if it doesn't exist, update if it does
+            { upsert: true, new: true } // Create a new document if it doesn't exist
           );
-          console.log(`[DEBUG] Processed game: ${game.id} - ${game.name}`);
+          console.log(`[DEBUG] Saved game: ${game.id} - ${game.name}`);
         }
       }
     } catch (error) {
