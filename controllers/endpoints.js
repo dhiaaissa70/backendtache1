@@ -340,7 +340,7 @@ async function callProviderAPI(payload) {
       const games = await GameImage.find(query)
         .skip(parseInt(offset))
         .limit(parseInt(limit))
-        .select("-_id gameId name category imageUrl"); // Exclude internal fields
+        .select("-_id gameId name category type release_date imageUrl"); // Include type and release_date
   
       res.status(200).json({ success: true, data: games });
     } catch (error) {
@@ -348,6 +348,7 @@ async function callProviderAPI(payload) {
       res.status(500).json({ success: false, message: "Failed to fetch games from the database." });
     }
   };
+  
 
   exports.getAllGames = async (req, res) => {
     try {
