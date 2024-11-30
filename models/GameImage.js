@@ -14,6 +14,16 @@ const GameImageSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
+  type: {
+    type: String,
+    required: true,
+  },
+
+  release_date: {
+    type: String,
+    required: true,
+  },
+ 
   imageUrl: {
     type: String,
     required: true,

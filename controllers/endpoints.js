@@ -216,6 +216,8 @@ async function callProviderAPI(payload) {
             { gameId: game.id }, // Query to find the game by ID
             {
               gameId: game.id,
+              type:game.type,
+              release_date:game. release_date,
               name: game.name,
               category: game.category,
               imageUrl: game.image,
