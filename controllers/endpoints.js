@@ -330,24 +330,27 @@ async function callProviderAPI(payload) {
   
 
   exports.getGameListFromDatabase = async (req, res) => {
-    const { category, limit = 30, offset = 0 } = req.query;
+    const { limit = 30, offset = 0, ...filters } = req.query; // Spread operator for dynamic filters
   
     try {
-      // Build query for specific category if provided
-      const query = category ? { category } : {};
+      // Apply dynamic filters (e.g., category, type)
+      const query = { ...filters };
   
       // Fetch games from the database with pagination
       const games = await GameImage.find(query)
         .skip(parseInt(offset))
         .limit(parseInt(limit))
-        .select("-_id gameId name category type release_date imageUrl"); // Include type and release_date
+        .select("-_id gameId name category type release_date imageUrl");
   
       res.status(200).json({ success: true, data: games });
     } catch (error) {
       console.error("[ERROR] Fetching games from database:", error.message);
-      res.status(500).json({ success: false, message: "Failed to fetch games from the database." });
+      res
+        .status(500)
+        .json({ success: false, message: "Failed to fetch games from the database." });
     }
   };
+  
   
 
   exports.getAllGames = async (req, res) => {
