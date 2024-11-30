@@ -349,6 +349,21 @@ async function callProviderAPI(payload) {
     }
   };
 
+  exports.getAllGames = async (req, res) => {
+    try {
+      // Fetch all games from the database
+      const games = await GameImage.find()
+        .select("-_id gameId name category imageUrl"); // Exclude internal fields if not needed
+  
+      // Respond with the entire dataset
+      res.status(200).json({ success: true, data: games });
+    } catch (error) {
+      console.error("[ERROR] Fetching all games from database:", error.message);
+      res.status(500).json({ success: false, message: "Failed to fetch all games from the database." });
+    }
+  };
+  
+
 // 4. Get Balance
 exports.getBalance = async (req, res) => {
   const { remote_id, session_id, currency, username } = req.query;
