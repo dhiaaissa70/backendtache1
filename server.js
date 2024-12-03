@@ -18,13 +18,7 @@ connectDB();
 app.set("trust proxy", 1); // Required for environments like Render, Heroku, etc.
 
 // Middlewares
-app.use(
-  cors({
-    origin: ["http://localhost:5173", "https://tache1.netlify.app"], // Allowed origins
-    methods: ["GET", "POST"], // Allowed HTTP methods
-    credentials: true, // Allow cookies if needed
-  })
-);
+
 app.use(compression());
 app.use(express.json());
 
