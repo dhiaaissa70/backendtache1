@@ -12,21 +12,28 @@ const PROVIDER_API_URL = process.env.PROVIDER_API_URL || "https://catch-me.bet/a
 
 // Helper function to generate SHA1 key
 async function callProviderAPI(payload) {
-    const url = "https://stage.game-program.com/api/seamless/provider";
-    try {
-      console.log("Calling Provider API:", payload);
-      const response = await axios.post(url, payload, {
-        headers: { "Content-Type": "application/json" },
-      });
-      console.log("Provider API Response:", response.data);
-      return response.data;
-    } catch (error) {
-      console.error("Provider API Error:", error.response?.data || error.message);
-      throw new Error(
-        error.response?.data?.message || "Error communicating with provider"
-      );
+  const url = "https://stage.game-program.com/api/seamless/provider";
+  try {
+    console.log("Calling Provider API:", payload);
+    const response = await axios.post(url, payload, {
+      headers: { "Content-Type": "application/json" },
+    });
+
+    // Ensure the response contains expected fields
+    if (!response.data || typeof response.data !== "object") {
+      throw new Error("Invalid API response: Expected an object.");
     }
+
+    console.log("Provider API Response:", response.data);
+    return response.data;
+  } catch (error) {
+    console.error("Provider API Error:", error.response?.data || error.message);
+    throw new Error(
+      error.response?.data?.message || "Error communicating with provider"
+    );
   }
+}
+
   
   // Utility function to generate SHA1 key
   function generateKey(params) {
@@ -183,27 +190,21 @@ async function callProviderAPI(payload) {
   
       const response = await callProviderAPI(payload);
   
-      if (response.error !== 0) {
-        console.error("[ERROR] Failed to fetch game list:", response.message);
-        return res
-          .status(500)
-          .json({ success: false, message: response.message || "Failed to fetch game list" });
+      // Validate response structure
+      if (!response.response || !Array.isArray(response.response)) {
+        throw new Error("Invalid API response: Missing or invalid 'response' field.");
       }
   
-      // Filter only mobile games
       const mobileGames = response.response.filter((game) => game.mobile === true);
   
-      // Attach provider details to each game
       const providerLogos = response.response_provider_logos || {};
       const enrichedGames = enrichGamesWithProviderData(mobileGames, providerLogos);
   
-      // Cache the filtered and enriched response
       cachedGameList = enrichedGames;
       cacheExpiry = Date.now() + CACHE_DURATION_MS;
   
       console.log("[DEBUG] Successfully fetched, filtered, and enriched game list.");
   
-      // Save enriched games to database
       await saveGamesToDatabase(enrichedGames);
   
       res.status(200).json({ success: true, data: enrichedGames });
@@ -213,28 +214,36 @@ async function callProviderAPI(payload) {
     }
   };
   
+  
   // Helper function to enrich games with provider details
   function enrichGamesWithProviderData(games, providerLogos) {
     const providerMap = {};
   
     // Build a mapping of provider systems to provider details
     for (const category in providerLogos) {
-      const providers = providerLogos[category];
+      const providers = providerLogos[category] || [];
       for (const provider of providers) {
-        providerMap[provider.system] = {
-          provider: provider.system,
-          provider_name: provider.name,
-          providerLogos: {
-            image_black: provider.image_black,
-            image_white: provider.image_white,
-            image_colored: provider.image_colored,
-          },
-        };
+        if (provider.system && provider.name) {
+          providerMap[provider.system] = {
+            provider: provider.system,
+            provider_name: provider.name,
+            providerLogos: {
+              image_black: provider.image_black || null,
+              image_white: provider.image_white || null,
+              image_colored: provider.image_colored || null,
+            },
+          };
+        }
       }
     }
   
     // Add provider details to games
     return games.map((game) => {
+      if (!game || !game.provider) {
+        console.warn(`[WARN] Skipping invalid game: ${JSON.stringify(game)}`);
+        return game; // Return game as-is if no valid provider exists
+      }
+  
       const providerData = providerMap[game.provider] || {};
       return {
         ...game,
@@ -245,37 +254,41 @@ async function callProviderAPI(payload) {
     });
   }
   
+  
   // Helper function to save game metadata to the database
   async function saveGamesToDatabase(gameList) {
     try {
       for (const game of gameList) {
-        if (game.imageUrl) {
-          // Prevent duplicates based on game name
-          const existingGame = await GameImage.findOne({ name: game.name });
-          if (existingGame) {
-            console.log(`[DEBUG] Skipping duplicate game: ${game.name}`);
-            continue;
-          }
-  
-          // Save game to the database
-          await GameImage.findOneAndUpdate(
-            { gameId: game.id }, // Query to find the game by ID
-            {
-              gameId: game.id,
-              type: game.type,
-              release_date: game.release_date,
-              name: game.name,
-              category: game.category,
-              imageUrl: game.image,
-              provider: game.provider,
-              provider_name: game.provider_name,
-              providerLogos: game.providerLogos,
-            },
-            { upsert: true, new: true } // Create if it doesn't exist
-          );
-  
-          console.log(`[DEBUG] Saved game: ${game.id} - ${game.name}`);
+        if (!game || !game.name || !game.id || !game.imageUrl) {
+          console.warn(`[WARN] Skipping invalid game entry: ${JSON.stringify(game)}`);
+          continue; // Skip invalid game entries
         }
+  
+        // Prevent duplicates based on game name
+        const existingGame = await GameImage.findOne({ name: game.name });
+        if (existingGame) {
+          console.log(`[DEBUG] Skipping duplicate game: ${game.name}`);
+          continue;
+        }
+  
+        // Save game to the database
+        await GameImage.findOneAndUpdate(
+          { gameId: game.id }, // Query to find the game by ID
+          {
+            gameId: game.id,
+            type: game.type || "Unknown", // Use default values if fields are missing
+            release_date: game.release_date || "Unknown",
+            name: game.name,
+            category: game.category || "Unknown",
+            imageUrl: game.imageUrl,
+            provider: game.provider || null,
+            provider_name: game.provider_name || null,
+            providerLogos: game.providerLogos || null,
+          },
+          { upsert: true, new: true } // Create if it doesn't exist
+        );
+  
+        console.log(`[DEBUG] Saved game: ${game.id} - ${game.name}`);
       }
     } catch (error) {
       console.error("[ERROR] Failed to save games to database:", error.message);
@@ -283,10 +296,7 @@ async function callProviderAPI(payload) {
   }
   
   
-  
-  
-  
-  
+
 
   // 3. Get Game
   exports.getGame = async (req, res) => {
