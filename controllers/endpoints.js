@@ -14,20 +14,14 @@ const PROVIDER_API_URL = process.env.PROVIDER_API_URL || "https://catch-me.bet/a
 async function callProviderAPI(payload) {
   const url = "https://stage.game-program.com/api/seamless/provider";
   try {
-    console.log("Calling Provider API:", payload);
+    console.log("[DEBUG] Calling Provider API:", payload);
     const response = await axios.post(url, payload, {
       headers: { "Content-Type": "application/json" },
     });
-
-    // Ensure the response contains expected fields
-    if (!response.data || typeof response.data !== "object") {
-      throw new Error("Invalid API response: Expected an object.");
-    }
-
-    console.log("Provider API Response:", response.data);
+    console.log("[DEBUG] Provider API Response:", response.data);
     return response.data;
   } catch (error) {
-    console.error("Provider API Error:", error.response?.data || error.message);
+    console.error("[ERROR] Provider API Error:", error.response?.data || error.message);
     throw new Error(
       error.response?.data?.message || "Error communicating with provider"
     );
@@ -169,8 +163,9 @@ async function callProviderAPI(payload) {
   
   exports.getlist = async (req, res) => {
     const CACHE_DURATION_MS = 10 * 60 * 1000; // Cache for 10 minutes
-    const { show_systems = 0, show_additional = false, currency = "EUR" } = req.query;
+    const { show_systems = 1, show_additional = true, currency = "EUR" } = req.query;
   
+    // Serve cached data if available
     if (cachedGameList && Date.now() < cacheExpiry) {
       console.log("[DEBUG] Serving cached game list.");
       return res.status(200).json({ success: true, data: cachedGameList });
@@ -178,10 +173,10 @@ async function callProviderAPI(payload) {
   
     try {
       const payload = {
-        api_password: API_PASSWORD,
-        api_login: API_USERNAME,
+        api_password: process.env.API_PASSWORD,
+        api_login: process.env.API_USERNAME,
         method: "getGameList",
-        show_systems: show_systems == 1 ? 1 : 0,
+        show_systems: parseInt(show_systems),
         show_additional: show_additional === "true" || show_additional === true,
         currency,
       };
@@ -190,27 +185,37 @@ async function callProviderAPI(payload) {
   
       const response = await callProviderAPI(payload);
   
-      // Validate response structure
-      if (!response.response || !Array.isArray(response.response)) {
-        throw new Error("Invalid API response: Missing or invalid 'response' field.");
+      if (response.error !== 0) {
+        console.error("[ERROR] Failed to fetch game list:", response.message);
+        return res.status(500).json({
+          success: false,
+          message: response.message || "Failed to fetch game list",
+        });
       }
   
+      // Filter only mobile games
       const mobileGames = response.response.filter((game) => game.mobile === true);
   
+      // Enrich games with provider data
       const providerLogos = response.response_provider_logos || {};
       const enrichedGames = enrichGamesWithProviderData(mobileGames, providerLogos);
   
+      // Cache enriched games
       cachedGameList = enrichedGames;
       cacheExpiry = Date.now() + CACHE_DURATION_MS;
   
       console.log("[DEBUG] Successfully fetched, filtered, and enriched game list.");
   
+      // Save enriched games to the database
       await saveGamesToDatabase(enrichedGames);
   
       res.status(200).json({ success: true, data: enrichedGames });
     } catch (error) {
       console.error("[ERROR] Unexpected error fetching game list:", error.message);
-      res.status(500).json({ success: false, message: "An error occurred while fetching the game list." });
+      res.status(500).json({
+        success: false,
+        message: "An error occurred while fetching the game list.",
+      });
     }
   };
   
@@ -219,31 +224,24 @@ async function callProviderAPI(payload) {
   function enrichGamesWithProviderData(games, providerLogos) {
     const providerMap = {};
   
-    // Build a mapping of provider systems to provider details
+    // Build a map of provider systems to provider details
     for (const category in providerLogos) {
-      const providers = providerLogos[category] || [];
+      const providers = providerLogos[category];
       for (const provider of providers) {
-        if (provider.system && provider.name) {
-          providerMap[provider.system] = {
-            provider: provider.system,
-            provider_name: provider.name,
-            providerLogos: {
-              image_black: provider.image_black || null,
-              image_white: provider.image_white || null,
-              image_colored: provider.image_colored || null,
-            },
-          };
-        }
+        providerMap[provider.system] = {
+          provider: provider.system,
+          provider_name: provider.name,
+          providerLogos: {
+            image_black: provider.image_black,
+            image_white: provider.image_white,
+            image_colored: provider.image_colored,
+          },
+        };
       }
     }
   
     // Add provider details to games
     return games.map((game) => {
-      if (!game || !game.provider) {
-        console.warn(`[WARN] Skipping invalid game: ${JSON.stringify(game)}`);
-        return game; // Return game as-is if no valid provider exists
-      }
-  
       const providerData = providerMap[game.provider] || {};
       return {
         ...game,
@@ -259,36 +257,36 @@ async function callProviderAPI(payload) {
   async function saveGamesToDatabase(gameList) {
     try {
       for (const game of gameList) {
-        if (!game || !game.name || !game.id || !game.imageUrl) {
-          console.warn(`[WARN] Skipping invalid game entry: ${JSON.stringify(game)}`);
-          continue; // Skip invalid game entries
+        if (!game.name || !game.id_hash || !game.image) {
+          console.warn(`[WARN] Skipping invalid game: ${JSON.stringify(game)}`);
+          continue;
         }
   
         // Prevent duplicates based on game name
         const existingGame = await GameImage.findOne({ name: game.name });
         if (existingGame) {
-          console.log(`[DEBUG] Skipping duplicate game: ${game.name}`);
+          console.warn(`[WARN] Skipping duplicate game: ${game.name}`);
           continue;
         }
   
-        // Save game to the database
+        // Save or update the game in the database
         await GameImage.findOneAndUpdate(
-          { gameId: game.id }, // Query to find the game by ID
+          { id_hash: game.id_hash },
           {
-            gameId: game.id,
-            type: game.type || "Unknown", // Use default values if fields are missing
-            release_date: game.release_date || "Unknown",
+            id_hash: game.id_hash,
             name: game.name,
-            category: game.category || "Unknown",
-            imageUrl: game.imageUrl,
-            provider: game.provider || null,
-            provider_name: game.provider_name || null,
-            providerLogos: game.providerLogos || null,
+            type: game.type,
+            release_date: game.release_date,
+            category: game.category,
+            imageUrl: game.image,
+            provider: game.provider,
+            provider_name: game.provider_name,
+            providerLogos: game.providerLogos,
           },
-          { upsert: true, new: true } // Create if it doesn't exist
+          { upsert: true, new: true }
         );
   
-        console.log(`[DEBUG] Saved game: ${game.id} - ${game.name}`);
+        console.log(`[DEBUG] Saved game: ${game.id_hash} - ${game.name}`);
       }
     } catch (error) {
       console.error("[ERROR] Failed to save games to database:", error.message);
