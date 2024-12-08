@@ -193,34 +193,71 @@ async function callProviderAPI(payload) {
       // Filter only mobile games
       const mobileGames = response.response.filter((game) => game.mobile === true);
   
-      // Cache the filtered response
-      cachedGameList = mobileGames;
+      // Attach provider details to each game
+      const providerLogos = response.response_provider_logos || {};
+      const enrichedGames = enrichGamesWithProviderData(mobileGames, providerLogos);
+  
+      // Cache the filtered and enriched response
+      cachedGameList = enrichedGames;
       cacheExpiry = Date.now() + CACHE_DURATION_MS;
   
-      console.log("[DEBUG] Successfully fetched and filtered game list.");
+      console.log("[DEBUG] Successfully fetched, filtered, and enriched game list.");
   
-      // Save filtered games to the database
-      await saveGamesToDatabase(mobileGames);
+      // Save enriched games to database
+      await saveGamesToDatabase(enrichedGames);
   
-      // Save provider logos if available
-      if (response.response_provider_logos) {
-        console.log("[DEBUG] Saving provider logos...");
-        await saveProviderLogos(response.response_provider_logos);
-      }
-  
-      res.status(200).json({ success: true, data: mobileGames });
+      res.status(200).json({ success: true, data: enrichedGames });
     } catch (error) {
       console.error("[ERROR] Unexpected error fetching game list:", error.message);
       res.status(500).json({ success: false, message: "An error occurred while fetching the game list." });
     }
   };
   
+  // Helper function to enrich games with provider details
+  function enrichGamesWithProviderData(games, providerLogos) {
+    const providerMap = {};
+  
+    // Build a mapping of provider systems to provider details
+    for (const category in providerLogos) {
+      const providers = providerLogos[category];
+      for (const provider of providers) {
+        providerMap[provider.system] = {
+          provider: provider.system,
+          provider_name: provider.name,
+          providerLogos: {
+            image_black: provider.image_black,
+            image_white: provider.image_white,
+            image_colored: provider.image_colored,
+          },
+        };
+      }
+    }
+  
+    // Add provider details to games
+    return games.map((game) => {
+      const providerData = providerMap[game.provider] || {};
+      return {
+        ...game,
+        provider: providerData.provider || null,
+        provider_name: providerData.provider_name || null,
+        providerLogos: providerData.providerLogos || null,
+      };
+    });
+  }
   
   // Helper function to save game metadata to the database
   async function saveGamesToDatabase(gameList) {
     try {
       for (const game of gameList) {
-        if (game.image) {
+        if (game.imageUrl) {
+          // Prevent duplicates based on game name
+          const existingGame = await GameImage.findOne({ name: game.name });
+          if (existingGame) {
+            console.log(`[DEBUG] Skipping duplicate game: ${game.name}`);
+            continue;
+          }
+  
+          // Save game to the database
           await GameImage.findOneAndUpdate(
             { gameId: game.id }, // Query to find the game by ID
             {
@@ -230,11 +267,13 @@ async function callProviderAPI(payload) {
               name: game.name,
               category: game.category,
               imageUrl: game.image,
-              provider: game.provider || null, // Save provider abbreviation if available
-              provider_name: game.provider_name || null, // Save provider name if available
+              provider: game.provider,
+              provider_name: game.provider_name,
+              providerLogos: game.providerLogos,
             },
             { upsert: true, new: true } // Create if it doesn't exist
           );
+  
           console.log(`[DEBUG] Saved game: ${game.id} - ${game.name}`);
         }
       }
@@ -243,34 +282,6 @@ async function callProviderAPI(payload) {
     }
   }
   
-
-
-  async function saveProviderLogos(providerLogos) {
-    try {
-      for (const category in providerLogos) {
-        const providers = providerLogos[category];
-        for (const provider of providers) {
-          // Save provider metadata
-          await GameImage.findOneAndUpdate(
-            { provider: provider.system }, // Query to find by provider abbreviation
-            {
-              provider: provider.system,
-              provider_name: provider.name,
-              providerLogos: {
-                image_black: provider.image_black,
-                image_white: provider.image_white,
-                image_colored: provider.image_colored,
-              },
-            },
-            { upsert: true, new: true } // Create if it doesn't exist, update if it does
-          );
-          console.log(`[DEBUG] Saved provider logo: ${provider.name}`);
-        }
-      }
-    } catch (error) {
-      console.error("[ERROR] Failed to save provider logos:", error.message);
-    }
-  }
   
   
   
