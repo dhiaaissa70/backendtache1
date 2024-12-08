@@ -18,7 +18,6 @@ const GameImageSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
-
   release_date: {
     type: String,
     required: true,
@@ -26,6 +25,18 @@ const GameImageSchema = new mongoose.Schema({
   imageUrl: {
     type: String,
     required: true,
+  },
+  provider: {
+    type: String,
+    required: false, // Abbreviation of the provider (e.g., 'ha')
+  },
+  provider_name: {
+    type: String,
+    required: false, // Full name of the provider (e.g., 'Habanero')
+  },
+  providerLogos: {
+    type: Object, // Stores logos from `response_provider_logos`
+    required: false,
   },
   createdAt: {
     type: Date,

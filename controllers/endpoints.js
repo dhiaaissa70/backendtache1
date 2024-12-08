@@ -157,7 +157,6 @@ async function callProviderAPI(payload) {
   
   
   
-
   let cachedGameList = null;
   let cacheExpiry = null;
   
@@ -191,38 +190,50 @@ async function callProviderAPI(payload) {
           .json({ success: false, message: response.message || "Failed to fetch game list" });
       }
   
-      cachedGameList = response.response; // Cache the response
+      // Filter only mobile games
+      const mobileGames = response.response.filter((game) => game.mobile === true);
+  
+      // Cache the filtered response
+      cachedGameList = mobileGames;
       cacheExpiry = Date.now() + CACHE_DURATION_MS;
   
-      console.log("[DEBUG] Successfully fetched game list.");
+      console.log("[DEBUG] Successfully fetched and filtered game list.");
   
-      // Save games to database
-      await saveGamesToDatabase(cachedGameList);
+      // Save filtered games to the database
+      await saveGamesToDatabase(mobileGames);
   
-      res.status(200).json({ success: true, data: cachedGameList });
+      // Save provider logos if available
+      if (response.response_provider_logos) {
+        console.log("[DEBUG] Saving provider logos...");
+        await saveProviderLogos(response.response_provider_logos);
+      }
+  
+      res.status(200).json({ success: true, data: mobileGames });
     } catch (error) {
       console.error("[ERROR] Unexpected error fetching game list:", error.message);
       res.status(500).json({ success: false, message: "An error occurred while fetching the game list." });
     }
   };
   
+  
   // Helper function to save game metadata to the database
   async function saveGamesToDatabase(gameList) {
     try {
       for (const game of gameList) {
         if (game.image) {
-          // Upsert game metadata: insert if it doesn't exist, update if it does
           await GameImage.findOneAndUpdate(
             { gameId: game.id }, // Query to find the game by ID
             {
               gameId: game.id,
-              type:game.type,
-              release_date:game. release_date,
+              type: game.type,
+              release_date: game.release_date,
               name: game.name,
               category: game.category,
               imageUrl: game.image,
+              provider: game.provider || null, // Save provider abbreviation if available
+              provider_name: game.provider_name || null, // Save provider name if available
             },
-            { upsert: true, new: true } // Create a new document if it doesn't exist
+            { upsert: true, new: true } // Create if it doesn't exist
           );
           console.log(`[DEBUG] Saved game: ${game.id} - ${game.name}`);
         }
@@ -231,6 +242,38 @@ async function callProviderAPI(payload) {
       console.error("[ERROR] Failed to save games to database:", error.message);
     }
   }
+  
+
+
+  async function saveProviderLogos(providerLogos) {
+    try {
+      for (const category in providerLogos) {
+        const providers = providerLogos[category];
+        for (const provider of providers) {
+          // Save provider metadata
+          await GameImage.findOneAndUpdate(
+            { provider: provider.system }, // Query to find by provider abbreviation
+            {
+              provider: provider.system,
+              provider_name: provider.name,
+              providerLogos: {
+                image_black: provider.image_black,
+                image_white: provider.image_white,
+                image_colored: provider.image_colored,
+              },
+            },
+            { upsert: true, new: true } // Create if it doesn't exist, update if it does
+          );
+          console.log(`[DEBUG] Saved provider logo: ${provider.name}`);
+        }
+      }
+    } catch (error) {
+      console.error("[ERROR] Failed to save provider logos:", error.message);
+    }
+  }
+  
+  
+  
   
   
 
