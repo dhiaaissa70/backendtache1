@@ -1,6 +1,11 @@
 const mongoose = require("mongoose");
 
 const GameImageSchema = new mongoose.Schema({
+  gameId: {
+    type: String,
+    required: true, // Ensure every game has a gameId
+    unique: false,  // `gameId` is not unique because duplicates are possible
+  },
   id_hash: {
     type: String,
     required: true,

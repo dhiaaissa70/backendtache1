@@ -161,13 +161,15 @@ async function callProviderAPI(payload) {
   let cachedGameList = null;
   let cacheExpiry = null;
   
+  
+  
   exports.getlist = async (req, res) => {
     const CACHE_DURATION_MS = 10 * 60 * 1000; // Cache for 10 minutes
     const { show_systems = 1, show_additional = true, currency = "EUR" } = req.query;
   
     // Serve cached data if available
     if (cachedGameList && Date.now() < cacheExpiry) {
-      console.log("[DEBUG] Serving cached game list.");
+      console.log("[DEBUG] Serving cached game list from cache.");
       return res.status(200).json({ success: true, data: cachedGameList });
     }
   
@@ -176,7 +178,7 @@ async function callProviderAPI(payload) {
         api_password: process.env.API_PASSWORD,
         api_login: process.env.API_USERNAME,
         method: "getGameList",
-        show_systems: parseInt(show_systems),
+        show_systems: parseInt(show_systems, 10),
         show_additional: show_additional === "true" || show_additional === true,
         currency,
       };
@@ -220,6 +222,7 @@ async function callProviderAPI(payload) {
   };
   
   
+  
   // Helper function to enrich games with provider details
   function enrichGamesWithProviderData(games, providerLogos) {
     const providerMap = {};
@@ -242,7 +245,7 @@ async function callProviderAPI(payload) {
   
     // Add provider details to games
     return games.map((game) => {
-      const providerData = providerMap[game.provider] || {};
+      const providerData = providerMap[game.system] || {}; // Use `game.system` for mapping
       return {
         ...game,
         provider: providerData.provider || null,
@@ -251,6 +254,7 @@ async function callProviderAPI(payload) {
       };
     });
   }
+  
   
   
   // Helper function to save game metadata to the database
@@ -262,17 +266,18 @@ async function callProviderAPI(payload) {
           continue;
         }
   
-        // Prevent duplicates based on game name
-        const existingGame = await GameImage.findOne({ name: game.name });
+        // Prevent duplicates based on `id_hash`
+        const existingGame = await GameImage.findOne({ id_hash: game.id_hash });
         if (existingGame) {
-          console.warn(`[WARN] Skipping duplicate game: ${game.name}`);
+          console.warn(`[WARN] Skipping duplicate game: ${game.name} (id_hash: ${game.id_hash})`);
           continue;
         }
   
         // Save or update the game in the database
         await GameImage.findOneAndUpdate(
-          { id_hash: game.id_hash },
+          { id_hash: game.id_hash }, // Find by unique `id_hash`
           {
+            gameId: game.id, // Add gameId if needed
             id_hash: game.id_hash,
             name: game.name,
             type: game.type,
