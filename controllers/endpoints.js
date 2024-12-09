@@ -321,10 +321,10 @@ function generateKey(params) {
       } = req.body;
   
       // Validate required parameters
-      if (!id_hash || !username || !key) {
+      if (!id_hash || !username) {
         return res.status(400).json({
           status: 400,
-          message: "id_hash, username, and key are required",
+          message: "id_hash and username are required",
         });
       }
   
