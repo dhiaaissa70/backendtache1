@@ -6,7 +6,7 @@ const GameImage = require("../models/GameImage"); // Import the GameImage model
 
 const API_PASSWORD = process.env.API_PASSWORD;
 const API_USERNAME = process.env.API_USERNAME;
-const API_SALT = process.env.API_SALT;
+const API_SALT = process.env.API_SALT || "8rE3ct4E3g";
 const BASE_URL = process.env.BASE_URL;
 const PROVIDER_API_URL = process.env.PROVIDER_API_URL || "https://catch-me.bet/api";
 
@@ -31,6 +31,7 @@ async function callProviderAPI(payload) {
   
  // Utility function to generate SHA1 key
  function generateKey(params) {
+  // Step 1: Sort parameters alphabetically
   const sortedParams = Object.keys(params)
     .sort()
     .reduce((acc, key) => {
@@ -40,11 +41,13 @@ async function callProviderAPI(payload) {
       return acc;
     }, {});
 
+  // Step 2: Create query string
   const queryString = Object.entries(sortedParams)
     .map(([key, value]) => `${key}=${value}`)
     .join("&");
 
-  const hashInput = `${process.env.API_SALT}${queryString}`;
+  // Step 3: Concatenate salt and generate hash
+  const hashInput = `${API_SALT}${queryString}`;
   return crypto.createHash("sha1").update(hashInput).digest("hex");
 }
 
