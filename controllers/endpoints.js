@@ -310,7 +310,7 @@ function generateKey(params) {
   exports.getGame = async (req, res) => {
     try {
       const {
-        gameid,
+        id_hash,
         username,
         play_for_fun = false,
         lang = "en",
@@ -369,7 +369,7 @@ function generateKey(params) {
         api_password: API_PASSWORD,
         api_login: API_USERNAME,
         method: "getGame",
-        gameid,
+        id_hash,
         user_username: username,
         user_password: username,
         play_for_fun: !!play_for_fun,
@@ -584,7 +584,7 @@ exports.debit = async (req, res) => {
       type: "debit",
       transaction_id,
       amount: parseFloat(amount),
-      gameId: game.gameId,
+      gameId: game.id_hash,
       gameName: game.name,
       balanceBefore: { sender: parseFloat(user.balance) + parseFloat(amount), receiver: null },
       balanceAfter: { sender: newBalance, receiver: null },
@@ -704,7 +704,7 @@ exports.credit = async (req, res) => {
       type: "credit",
       transaction_id,
       amount: parseFloat(amount),
-      gameId: game.gameId,
+      gameId: game.id_hash,
       gameName: game.name,
       balanceBefore: { sender: parseFloat(user.balance) - parseFloat(amount), receiver: null },
       balanceAfter: { sender: newBalance, receiver: null },
@@ -794,7 +794,7 @@ exports.rollback = async (req, res) => {
       type: "rollback",
       transaction_id: `${transaction_id}_rollback`, // Unique ID for the rollback transaction
       amount: originalTransaction.amount,
-      gameId: game.gameId,
+      gameId: game.id_hash,
       gameName: game.name,
       balanceBefore: { sender: user.balance - originalTransaction.amount, receiver: null },
       balanceAfter: { sender: updatedBalance, receiver: null },
