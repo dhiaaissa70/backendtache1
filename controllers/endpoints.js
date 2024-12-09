@@ -310,7 +310,7 @@ function generateKey(params) {
   exports.getGame = async (req, res) => {
     try {
       const {
-        id_hash, // Use id_hash to identify the game uniquely
+        gameid,
         username,
         play_for_fun = false,
         lang = "en",
@@ -319,36 +319,10 @@ function generateKey(params) {
         cashierurl = "https://catch-me.bet",
       } = req.body;
   
-      // Validate required parameters
-      if (!id_hash || !username) {
-        return res.status(400).json({
-          status: 400,
-          message: "id_hash and username are required",
-        });
+      if (!gameid || !username) {
+        return res.status(400).json({ status: 400, message: "Game ID and username are required" });
       }
   
-      // Construct the payload
-      const payload = {
-        api_password: API_PASSWORD,
-        api_login: API_USERNAME,
-        method: "getGame",
-        id_hash,
-        username,
-        play_for_fun: String(!!play_for_fun), // Ensure consistent boolean conversion
-        lang,
-        currency,
-        homeurl,
-        cashierurl,
-      };
-  
-      // Generate the expected key
-      const expectedKey = generateKey(payload);
-      payload.expectedKey = expectedKey; // Append expected key directly to payload
-  
-      console.log("[DEBUG] Generated Key on Backend:", expectedKey);
-      console.log("[DEBUG] Payload with Expected Key:", payload);
-  
-      // Fetch user information
       const user = await User.findOne({ username });
       if (!user) {
         return res.status(404).json({ status: 404, message: "User not found" });
@@ -356,7 +330,6 @@ function generateKey(params) {
   
       let remote_id = user.remote_id;
   
-      // Handle remote_id and fetch/create player if missing
       if (!remote_id) {
         const playerExistsPayload = {
           api_password: API_PASSWORD,
@@ -367,7 +340,6 @@ function generateKey(params) {
         };
   
         const playerExistsResponse = await callProviderAPI(playerExistsPayload);
-  
         if (playerExistsResponse.error === 0) {
           remote_id = playerExistsResponse.response.id;
           user.remote_id = remote_id;
@@ -388,20 +360,29 @@ function generateKey(params) {
             user.remote_id = remote_id;
             await user.save();
           } else {
-            return res
-              .status(400)
-              .json({ status: 400, message: createPlayerResponse.message });
+            return res.status(400).json({ status: 400, message: createPlayerResponse.message });
           }
         }
       }
   
-      // Fetch the game using id_hash
-      payload.remote_id = remote_id;
+      const payload = {
+        api_password: API_PASSWORD,
+        api_login: API_USERNAME,
+        method: "getGame",
+        gameid,
+        user_username: username,
+        user_password: username,
+        play_for_fun: !!play_for_fun,
+        lang,
+        currency,
+        homeurl,
+        cashierurl,
+      };
+  
       const response = await callProviderAPI(payload);
-  
       if (response.error === 0) {
-        const gameUrl = `${response.response}&key=${expectedKey}`; // Embed key in the game URL
-  
+        const queryKey = generateKey(payload);
+        const gameUrl = `${response.response}&key=${queryKey}`;
         return res.status(200).json({
           success: true,
           data: {
@@ -415,10 +396,7 @@ function generateKey(params) {
       }
     } catch (error) {
       console.error("[ERROR] getGame:", error.message);
-      res.status(500).json({
-        status: 500,
-        message: "Internal server error",
-      });
+      res.status(500).json({ status: 500, message: "Internal server error" });
     }
   };
   
