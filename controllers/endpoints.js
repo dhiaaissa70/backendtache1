@@ -44,8 +44,10 @@ function generateKey(params) {
 
   // Step 2: Build Query String with Encoding
   const queryString = Object.entries(sortedParams)
-    .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
-    .join("&");
+  .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
+  .join("&");
+
+
 
   console.log("[DEBUG] Query String on Backend:", queryString);
 
