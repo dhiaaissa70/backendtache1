@@ -29,8 +29,7 @@ async function callProviderAPI(payload) {
 }
 
   
- // Utility function to generate SHA1 key
- function generateKey(params) {
+function generateKey(params) {
   // Step 1: Sort parameters alphabetically
   const sortedParams = Object.keys(params)
     .sort()
@@ -41,14 +40,19 @@ async function callProviderAPI(payload) {
       return acc;
     }, {});
 
-  // Step 2: Create query string
+  // Step 2: Build Query String
   const queryString = Object.entries(sortedParams)
-    .map(([key, value]) => `${key}=${value}`)
+    .map(([key, value]) => `${key}=${value}`) // Avoid encoding values for simplicity
     .join("&");
 
-  // Step 3: Concatenate salt and generate hash
+  console.log("[DEBUG] Query String on Backend:", queryString);
+
+  // Step 3: Concatenate Salt and Generate SHA-1 Hash
   const hashInput = `${API_SALT}${queryString}`;
-  return crypto.createHash("sha1").update(hashInput).digest("hex");
+  const key = crypto.createHash("sha1").update(hashInput).digest("hex");
+
+  console.log("[DEBUG] Generated Key on Backend:", key);
+  return key;
 }
 
   
