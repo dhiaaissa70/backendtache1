@@ -51,6 +51,9 @@ function generateKey(params) {
 
   // Step 3: Concatenate Salt and Generate SHA-1 Hash
   const hashInput = `${API_SALT}${queryString}`;
+
+  console.log("[DEBUG] Hash Input on Backend:", hashInput);
+
   const key = crypto.createHash("sha1").update(hashInput).digest("hex");
 
   console.log("[DEBUG] Generated Key on Backend:", key);
