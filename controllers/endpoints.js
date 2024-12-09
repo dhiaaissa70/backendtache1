@@ -425,18 +425,23 @@ function generateKey(params) {
   
   
   exports.getGameListFromDatabase = async (req, res) => {
-    const { limit = 30, offset = 0, ...filters } = req.query; 
+    const { limit = 30, offset = 0, ...filters } = req.query;
   
     try {
       // Apply dynamic filters (e.g., category, type)
       const query = { ...filters };
   
-      // Fetch games from the database with pagination
+      console.log("[DEBUG] Query with filters:", query);
+  
+      // Fetch games from the database with pagination and ensure id_hash is included
       const games = await GameImage.find(query)
         .skip(parseInt(offset))
         .limit(parseInt(limit))
-        .select("-_id gameId name category type release_date imageUrl");
+        .select("-_id id_hash gameId name category type release_date imageUrl");
   
+      console.log("[DEBUG] Games fetched from database:", games);
+  
+      // Respond with the game list
       res.status(200).json({ success: true, data: games });
     } catch (error) {
       console.error("[ERROR] Fetching games from database:", error.message);
@@ -445,6 +450,7 @@ function generateKey(params) {
         .json({ success: false, message: "Failed to fetch games from the database." });
     }
   };
+  
   
   
 
