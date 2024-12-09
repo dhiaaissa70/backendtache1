@@ -28,6 +28,14 @@ const TransferSchema = new mongoose.Schema({
     type: Number,
     required: true,
   },
+  gameId: { 
+    type: String, 
+    required: false, // Not required for non-game transactions
+  },
+  gameName: { 
+    type: String, 
+    required: false, // Not required for non-game transactions
+  },
   note: {
     type: String,
   },
