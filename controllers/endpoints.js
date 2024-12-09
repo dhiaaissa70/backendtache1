@@ -329,13 +329,16 @@ function generateKey(params) {
   
       // Construct the payload
       const payload = {
+        api_password: API_PASSWORD,
+        api_login: API_USERNAME,
+        method: "getGame",
         id_hash,
         username,
         play_for_fun: String(!!play_for_fun), // Ensure consistent boolean conversion
         lang,
         currency,
-        homeurl: homeurl.trim(),
-        cashierurl: cashierurl.trim(),
+        homeurl,
+        cashierurl,
       };
   
       // Generate the expected key
