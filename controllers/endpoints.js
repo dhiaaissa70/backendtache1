@@ -1,5 +1,5 @@
 const axios = require("axios");
-const crypto = require("crypto");
+const CryptoJS = require("crypto-js");
 const User = require("../models/User");
 const Transfer = require("../models/transfer");
 const GameImage = require("../models/GameImage"); // Import the GameImage model
@@ -30,7 +30,7 @@ async function callProviderAPI(payload) {
 
   
  // Utility function to generate SHA1 key
-function generateKey(params) {
+ function generateKey(params) {
   // Step 1: Sort parameters alphabetically
   const sortedParams = Object.keys(params)
     .sort()
@@ -41,20 +41,16 @@ function generateKey(params) {
       return acc;
     }, {});
 
-  console.log("[DEBUG] Sorted Params for Key Generation:", sortedParams);
-
   // Step 2: Create query string
   const queryString = Object.entries(sortedParams)
-    .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
+    .map(([key, value]) => `${key}=${value}`)
     .join("&");
 
-  console.log("[DEBUG] Query String:", queryString);
+  // Step 3: Concatenate salt and generate SHA1 hash
+  const hashInput = `${API_SALT}${queryString}`;
+  const key = CryptoJS.SHA1(hashInput).toString(CryptoJS.enc.Hex);
 
-  // Step 3: Concatenate salt and generate hash
-  const hashInput = `${process.env.API_SALT}${queryString}`;
-  const key = crypto.createHash("sha1").update(hashInput).digest("hex");
-
-  console.log("[DEBUG] Generated Key:", key);
+  console.log("Generated Key:", key);
   return key;
 }
 
