@@ -328,17 +328,24 @@ function generateKey(params) {
         });
       }
   
-      // Compute the expected key
+      // Construct the payload
       const payload = {
         id_hash,
         username,
-        play_for_fun: String(!!play_for_fun),
+        play_for_fun: String(!!play_for_fun), // Ensure consistent boolean conversion
         lang,
         currency,
         homeurl: homeurl.trim(),
         cashierurl: cashierurl.trim(),
       };
+  
+      console.log("[DEBUG] Sorted Params on Backend:", payload);
+  
+      // Compute the expected key
       const expectedKey = generateKey(payload);
+  
+      console.log("[DEBUG] Generated Key on Backend:", expectedKey);
+      console.log("[DEBUG] Provided Key:", key);
   
       // Validate the provided key
       if (key !== expectedKey) {
@@ -423,6 +430,7 @@ function generateKey(params) {
       });
     }
   };
+  
   
   
   exports.getGameListFromDatabase = async (req, res) => {
