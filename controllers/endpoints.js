@@ -310,7 +310,7 @@ function generateKey(params) {
   exports.getGame = async (req, res) => {
     try {
       const {
-        id_hash,
+        id_hash, // Game identifier from the frontend
         username,
         play_for_fun = false,
         lang = "en",
@@ -319,17 +319,26 @@ function generateKey(params) {
         cashierurl = "https://catch-me.bet",
       } = req.body;
   
-      if (!gameid || !username) {
-        return res.status(400).json({ status: 400, message: "Game ID and username are required" });
+      // Validate required parameters
+      if (!id_hash || !username) {
+        return res.status(400).json({
+          status: 400,
+          message: "id_hash and username are required",
+        });
       }
   
+      // Fetch user information
       const user = await User.findOne({ username });
       if (!user) {
-        return res.status(404).json({ status: 404, message: "User not found" });
+        return res.status(404).json({
+          status: 404,
+          message: "User not found",
+        });
       }
   
       let remote_id = user.remote_id;
   
+      // Handle missing `remote_id` by checking or creating the player
       if (!remote_id) {
         const playerExistsPayload = {
           api_password: API_PASSWORD,
@@ -360,18 +369,22 @@ function generateKey(params) {
             user.remote_id = remote_id;
             await user.save();
           } else {
-            return res.status(400).json({ status: 400, message: createPlayerResponse.message });
+            return res.status(400).json({
+              status: 400,
+              message: createPlayerResponse.message,
+            });
           }
         }
       }
   
+      // Prepare payload for the provider API
       const payload = {
         api_password: API_PASSWORD,
         api_login: API_USERNAME,
         method: "getGame",
         id_hash,
         user_username: username,
-        user_password: username,
+        user_password: username, // If applicable
         play_for_fun: !!play_for_fun,
         lang,
         currency,
@@ -379,10 +392,15 @@ function generateKey(params) {
         cashierurl,
       };
   
+      console.log("[DEBUG] Payload to Provider API:", payload);
+  
+      // Call the provider API
       const response = await callProviderAPI(payload);
+      console.log("[DEBUG] Provider API Response:", response);
+  
+      // Check response from the provider API
       if (response.error === 0) {
-        const queryKey = generateKey(payload);
-        const gameUrl = `${response.response}&key=${queryKey}`;
+        const gameUrl = `${response.response}&key=${generateKey(payload)}`;
         return res.status(200).json({
           success: true,
           data: {
@@ -392,13 +410,20 @@ function generateKey(params) {
           },
         });
       } else {
-        return res.status(400).json({ status: 400, message: response.message });
+        return res.status(400).json({
+          status: 400,
+          message: response.message,
+        });
       }
     } catch (error) {
       console.error("[ERROR] getGame:", error.message);
-      res.status(500).json({ status: 500, message: "Internal server error" });
+      res.status(500).json({
+        status: 500,
+        message: "Internal server error",
+      });
     }
   };
+  
   
   
   
