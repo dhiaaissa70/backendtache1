@@ -6,7 +6,7 @@ const GameImage = require("../models/GameImage"); // Import the GameImage model
 
 const API_PASSWORD = process.env.API_PASSWORD;
 const API_USERNAME = process.env.API_USERNAME;
-const API_SALT = process.env.API_SALT || "8rE3ct4E3g";
+const API_SALT = process.env.API_SALT || "8rE3ct4E3g"; // Must match frontend
 const BASE_URL = process.env.BASE_URL;
 const PROVIDER_API_URL = process.env.PROVIDER_API_URL || "https://catch-me.bet/api";
 
@@ -40,9 +40,11 @@ function generateKey(params) {
       return acc;
     }, {});
 
-  // Step 2: Build Query String
+  console.log("[DEBUG] Sorted Params on Backend:", sortedParams);
+
+  // Step 2: Build Query String with Encoding
   const queryString = Object.entries(sortedParams)
-    .map(([key, value]) => `${key}=${value}`) // Avoid encoding values for simplicity
+    .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
     .join("&");
 
   console.log("[DEBUG] Query String on Backend:", queryString);
@@ -325,15 +327,15 @@ function generateKey(params) {
       const payload = {
         id_hash,
         username,
-        play_for_fun: !!play_for_fun,
+        play_for_fun: String(!!play_for_fun),
         lang,
         currency,
-        homeurl,
-        cashierurl,
+        homeurl: homeurl.trim(),
+        cashierurl: cashierurl.trim(),
       };
       const expectedKey = generateKey(payload);
   
-      // Validate the provided key  2. Q: Slat Key test wrong in “basic tests”
+      // Validate the provided key
       if (key !== expectedKey) {
         console.error("[ERROR] Invalid key for getGame:", { expectedKey, providedKey: key });
         return res.status(403).json({
@@ -350,9 +352,8 @@ function generateKey(params) {
   
       let remote_id = user.remote_id;
   
-      // Check and handle if remote_id is missing
+      // Handle remote_id and fetch/create player if missing
       if (!remote_id) {
-        // Check if player exists in provider's system
         const playerExistsPayload = {
           api_password: API_PASSWORD,
           api_login: API_USERNAME,
@@ -364,12 +365,10 @@ function generateKey(params) {
         const playerExistsResponse = await callProviderAPI(playerExistsPayload);
   
         if (playerExistsResponse.error === 0) {
-          // Update remote_id in the database
           remote_id = playerExistsResponse.response.id;
           user.remote_id = remote_id;
           await user.save();
         } else {
-          // If player does not exist, create a new player
           const createPlayerPayload = {
             api_password: API_PASSWORD,
             api_login: API_USERNAME,
@@ -393,12 +392,12 @@ function generateKey(params) {
       }
   
       // Fetch the game using id_hash
-      payload.remote_id = remote_id; // Include remote_id in the payload
+      payload.remote_id = remote_id;
       const response = await callProviderAPI(payload);
   
       if (response.error === 0) {
-        const queryKey = generateKey(payload); // Generate query key for validation
-        const gameUrl = `${response.response}&key=${queryKey}`; // Construct the game URL
+        const queryKey = generateKey(payload);
+        const gameUrl = `${response.response}&key=${queryKey}`;
   
         return res.status(200).json({
           success: true,
