@@ -317,7 +317,6 @@ function generateKey(params) {
         currency = "EUR",
         homeurl = "https://catch-me.bet",
         cashierurl = "https://catch-me.bet",
-        key, // Key from the request to validate
       } = req.body;
   
       // Validate required parameters
@@ -339,22 +338,12 @@ function generateKey(params) {
         cashierurl: cashierurl.trim(),
       };
   
-      console.log("[DEBUG] Sorted Params on Backend:", payload);
-  
-      // Compute the expected key
+      // Generate the expected key
       const expectedKey = generateKey(payload);
+      payload.expectedKey = expectedKey; // Append expected key directly to payload
   
       console.log("[DEBUG] Generated Key on Backend:", expectedKey);
-      console.log("[DEBUG] Provided Key:", key);
-  
-      // Validate the provided key
-      if (key !== expectedKey) {
-        console.error("[ERROR] Invalid key for getGame:", { expectedKey, providedKey: key });
-        return res.status(403).json({
-          status: 403,
-          message: "Hash Code Invalid",
-        });
-      }
+      console.log("[DEBUG] Payload with Expected Key:", payload);
   
       // Fetch user information
       const user = await User.findOne({ username });
@@ -408,8 +397,7 @@ function generateKey(params) {
       const response = await callProviderAPI(payload);
   
       if (response.error === 0) {
-        const queryKey = generateKey(payload);
-        const gameUrl = `${response.response}&key=${queryKey}`;
+        const gameUrl = `${response.response}&key=${expectedKey}`; // Embed key in the game URL
   
         return res.status(200).json({
           success: true,
@@ -430,6 +418,7 @@ function generateKey(params) {
       });
     }
   };
+  
   
   
   
