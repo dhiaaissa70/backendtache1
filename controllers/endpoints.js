@@ -310,7 +310,7 @@ function generateKey(params) {
   exports.getGame = async (req, res) => {
     try {
       const {
-        id_hash, // Game identifier from the frontend
+        gameid,
         username,
         play_for_fun = false,
         lang = "en",
@@ -319,26 +319,17 @@ function generateKey(params) {
         cashierurl = "https://catch-me.bet",
       } = req.body;
   
-      // Validate required parameters
-      if (!id_hash || !username) {
-        return res.status(400).json({
-          status: 400,
-          message: "id_hash and username are required",
-        });
+      if (!gameid || !username) {
+        return res.status(400).json({ status: 400, message: "Game ID and username are required" });
       }
   
-      // Fetch user information
       const user = await User.findOne({ username });
       if (!user) {
-        return res.status(404).json({
-          status: 404,
-          message: "User not found",
-        });
+        return res.status(404).json({ status: 404, message: "User not found" });
       }
   
       let remote_id = user.remote_id;
   
-      // Handle missing `remote_id` by checking or creating the player
       if (!remote_id) {
         const playerExistsPayload = {
           api_password: API_PASSWORD,
@@ -369,22 +360,18 @@ function generateKey(params) {
             user.remote_id = remote_id;
             await user.save();
           } else {
-            return res.status(400).json({
-              status: 400,
-              message: createPlayerResponse.message,
-            });
+            return res.status(400).json({ status: 400, message: createPlayerResponse.message });
           }
         }
       }
   
-      // Prepare payload for the provider API
       const payload = {
         api_password: API_PASSWORD,
         api_login: API_USERNAME,
         method: "getGame",
-        id_hash,
+        gameid,
         user_username: username,
-        user_password: username, // If applicable
+        user_password: username,
         play_for_fun: !!play_for_fun,
         lang,
         currency,
@@ -392,15 +379,10 @@ function generateKey(params) {
         cashierurl,
       };
   
-      console.log("[DEBUG] Payload to Provider API:", payload);
-  
-      // Call the provider API
       const response = await callProviderAPI(payload);
-      console.log("[DEBUG] Provider API Response:", response);
-  
-      // Check response from the provider API
       if (response.error === 0) {
-        const gameUrl = `${response.response}&key=${generateKey(payload)}`;
+        const queryKey = generateKey(payload);
+        const gameUrl = `${response.response}&key=${queryKey}`;
         return res.status(200).json({
           success: true,
           data: {
@@ -410,19 +392,37 @@ function generateKey(params) {
           },
         });
       } else {
-        return res.status(400).json({
-          status: 400,
-          message: response.message,
-        });
+        return res.status(400).json({ status: 400, message: response.message });
       }
     } catch (error) {
       console.error("[ERROR] getGame:", error.message);
-      res.status(500).json({
-        status: 500,
-        message: "Internal server error",
-      });
+      res.status(500).json({ status: 500, message: "Internal server error" });
     }
   };
+  
+
+  exports.getGameListFromDatabase = async (req, res) => {
+    const { limit = 30, offset = 0, ...filters } = req.query; 
+  
+    try {
+      // Apply dynamic filters (e.g., category, type)
+      const query = { ...filters };
+  
+      // Fetch games from the database with pagination
+      const games = await GameImage.find(query)
+        .skip(parseInt(offset))
+        .limit(parseInt(limit))
+        .select("-_id gameId name category type release_date imageUrl");
+  
+      res.status(200).json({ success: true, data: games });
+    } catch (error) {
+      console.error("[ERROR] Fetching games from database:", error.message);
+      res
+        .status(500)
+        .json({ success: false, message: "Failed to fetch games from the database." });
+    }
+  };
+  
   
   
   
@@ -609,7 +609,7 @@ exports.debit = async (req, res) => {
       type: "debit",
       transaction_id,
       amount: parseFloat(amount),
-      gameId: game.id_hash,
+      gameId: game.gameId,
       gameName: game.name,
       balanceBefore: { sender: parseFloat(user.balance) + parseFloat(amount), receiver: null },
       balanceAfter: { sender: newBalance, receiver: null },
@@ -729,7 +729,7 @@ exports.credit = async (req, res) => {
       type: "credit",
       transaction_id,
       amount: parseFloat(amount),
-      gameId: game.id_hash,
+      gameId: game.gameId,
       gameName: game.name,
       balanceBefore: { sender: parseFloat(user.balance) - parseFloat(amount), receiver: null },
       balanceAfter: { sender: newBalance, receiver: null },
@@ -819,7 +819,7 @@ exports.rollback = async (req, res) => {
       type: "rollback",
       transaction_id: `${transaction_id}_rollback`, // Unique ID for the rollback transaction
       amount: originalTransaction.amount,
-      gameId: game.id_hash,
+      gameId: game.gameId,
       gameName: game.name,
       balanceBefore: { sender: user.balance - originalTransaction.amount, receiver: null },
       balanceAfter: { sender: updatedBalance, receiver: null },
