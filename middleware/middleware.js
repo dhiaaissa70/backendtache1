@@ -5,10 +5,17 @@ const API_SALT = process.env.API_SALT;
 function validateKey(reqQuery, salt) {
     const receivedKey = reqQuery.key;
     const calculatedKey = generateKey(reqQuery, salt);
+
+    console.log("[DEBUG] Received Key:", receivedKey);
+    console.log("[DEBUG] Calculated Key:", calculatedKey);
+
+    
     return receivedKey === calculatedKey;
   }
 
-  
+
+
+
   
 function validateRequestKey(req, res, next) {
     const { key } = req.query;
