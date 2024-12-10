@@ -1,31 +1,28 @@
 const express = require("express");
 const router = express.Router();
-const endpointController = require("../controllers/endpoints"); // Controller containing logic
-const { validateRequestKey } = require("../middleware/middleware"); // Middleware for key validation
-
-// Apply key validation middleware globally to all routes that require it
-router.use(validateRequestKey);
+const endpointController = require("../controllers/endpoints");
+const { validateRequestKey } = require("../middleware/middleware");
 
 // Game-related routes
-router.post("/getlist", endpointController.getlist); // Fetch list of available games
-router.get("/gamesLocal", endpointController.getGameListFromDatabase); // Fetch local database games
+router.post("/getlist", endpointController.getlist); // Fetch provider game list
+router.get("/gamesLocal", endpointController.getGameListFromDatabase); // Fetch games from local database
 router.get("/get-all-games", endpointController.getAllGames); // Fetch all games
 
-// Game session route
-router.post("/get-game", endpointController.getGame); // Retrieve game launch URL and session
+// Game session routes
+router.post("/get-game", endpointController.getGame); // Get game launch URL and session details
 
 // Player management routes
-router.post("/player-exists", endpointController.playerExists); // Check if player exists
+router.post("/player-exists", endpointController.playerExists); // Check if a player exists
 router.post("/create-player", endpointController.createPlayer); // Create a new player account
 
 // Transaction-related routes
-router.get("/balance", endpointController.getBalance); // Get player's balance
-router.get("/debit", endpointController.debit); // Debit player's balance
-router.get("/credit", endpointController.credit); // Credit player's balance
+router.get("/balance", endpointController.getBalance); // Retrieve player's balance
+router.get("/debit", endpointController.debit); // Debit player balance
+router.get("/credit", endpointController.credit); // Credit player balance
 router.get("/rollback", endpointController.rollback); // Rollback a transaction
 
-// Fallback route to handle actions via query parameter
-router.get("/", (req, res) => {
+// Apply `validateRequestKey` middleware specifically to the fallback route
+router.get("/", validateRequestKey, (req, res) => {
     const { action } = req.query;
 
     switch (action) {
@@ -38,6 +35,7 @@ router.get("/", (req, res) => {
         case "rollback":
             return endpointController.rollback(req, res);
         default:
+            console.warn("[WARN] Invalid action query parameter");
             return res.status(404).json({ success: false, message: "Invalid action." });
     }
 });
