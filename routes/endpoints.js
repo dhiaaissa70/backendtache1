@@ -3,24 +3,30 @@ const router = express.Router();
 const endpointController = require("../controllers/endpoints"); // Controller containing logic
 const { validateRequestKey } = require("../middleware/middleware"); // Middleware for key validation
 
-// Routes that require key validation
-router.use(validateRequestKey); // Apply key validation middleware globally to relevant routes
+// Apply key validation middleware globally to all routes that require it
+router.use(validateRequestKey);
 
-// 1. Routes to retrieve game lists
+// Game-related routes
 router.post("/getlist", endpointController.getlist); // Fetch list of available games
-router.get("/gamesLocal", endpointController.getGameListFromDatabase); // Fetch list of available games from local DB
+router.get("/gamesLocal", endpointController.getGameListFromDatabase); // Fetch local database games
 router.get("/get-all-games", endpointController.getAllGames); // Fetch all games
 
-// 2. Route to retrieve a specific game session
+// Game session route
 router.post("/get-game", endpointController.getGame); // Retrieve game launch URL and session
 
-// 3. Routes for player management
-router.post("/player-exists", endpointController.playerExists); // Check if player exists in provider's system
+// Player management routes
+router.post("/player-exists", endpointController.playerExists); // Check if player exists
 router.post("/create-player", endpointController.createPlayer); // Create a new player account
 
-// 4. Routes for transactions
-router.get("/", (req, res, next) => {
-    const action = req.query.action;
+// Transaction-related routes
+router.get("/balance", endpointController.getBalance); // Get player's balance
+router.get("/debit", endpointController.debit); // Debit player's balance
+router.get("/credit", endpointController.credit); // Credit player's balance
+router.get("/rollback", endpointController.rollback); // Rollback a transaction
+
+// Fallback route to handle actions via query parameter
+router.get("/", (req, res) => {
+    const { action } = req.query;
 
     switch (action) {
         case "balance":
@@ -35,11 +41,5 @@ router.get("/", (req, res, next) => {
             return res.status(404).json({ success: false, message: "Invalid action." });
     }
 });
-
-// Individual routes for transactions
-router.get("/balance", endpointController.getBalance); // Get player balance
-router.get("/debit", endpointController.debit); // Debit player's balance
-router.get("/credit", endpointController.credit); // Credit player's balance
-router.get("/rollback", endpointController.rollback); // Rollback transaction
 
 module.exports = router;
