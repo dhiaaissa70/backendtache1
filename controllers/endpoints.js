@@ -28,34 +28,46 @@ async function callProviderAPI(payload) {
   }
 }
 
-  
+  //geanration ssh
   // Utility function to generate SHA1 key
-
-
-
-
-
-
-
-function handleInvalidKey(res) {
-  return res.status(403).json({ status: "403", message: "Hash Code Invalid" });
-}
-
-async function getPreviousResponse(transaction_id) {
-  const previousTransaction = await Transfer.findOne({ transaction_id });
-  if (previousTransaction && previousTransaction.response) {
-      return previousTransaction.response; // Return stored response
+  function generateKey(params, providedKey) {
+    // Step 1: Sort parameters alphabetically
+    const sortedParams = Object.keys(params)
+      .sort()
+      .reduce((acc, key) => {
+        if (params[key] !== undefined && params[key] !== null && params[key] !== "") {
+          acc[key] = params[key];
+        }
+        return acc;
+      }, {});
+  
+    console.log("[DEBUG] Sorted Params for Key Generation:", sortedParams);
+  
+    // Step 2: Create query string
+    const queryString = Object.entries(sortedParams)
+      .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
+      .join("&");
+  
+    console.log("[DEBUG] Query String:", queryString);
+  
+    // Step 3: Concatenate salt and generate hash
+    const hashInput = `${process.env.API_SALT}${queryString}`;
+    const key = crypto.createHash("sha1").update(hashInput).digest("hex");
+  
+    console.log("[DEBUG] Generated Key:", key);
+  
+    // Step 4: Validate the provided key (if applicable)
+    if (providedKey && providedKey !== key) {
+      console.error("[ERROR] Hash Code Invalid. Provided key does not match.");
+      const error = new Error("Hash Code Invalid");
+      error.statusCode = 403; // Set HTTP status code to 403 (Forbidden)
+      error.message = "Wrong key";
+      throw error; // Throw error for handling in the calling function
+    }
+  
+    return key;
   }
-  return null;
-}
-
-async function saveTransactionResponse(transaction_id, response) {
-  await Transfer.findOneAndUpdate(
-      { transaction_id },
-      { response },
-      { upsert: true, new: true }
-  );
-}
+  
   
   // Error handler function
   function handleError(res, message, statusCode = 500) {
@@ -471,178 +483,221 @@ exports.getBalance = async (req, res) => {
 // 5. Debit (Bet)
 // Debit (Bet) Endpoint
 exports.debit = async (req, res) => {
-  const {
+    const {
+      username,
       remote_id,
+      session_id,
       amount,
       provider,
       game_id,
-      session_id,
+      transaction_id,
       gamesession_id,
       currency = "EUR",
-      transaction_id,
-      key,
-  } = req.query;
-
-  // Validate Key
-  if (!validateKey(req.query, API_SALT)) {
-      return res.status(403).json({ status: "403", msg: "Hash Code Invalid" });
-  }
-
-  // Validate Required Parameters
-  if (
+    } = req.query;
+  
+    // Validate required parameters
+    if (
+      !username ||
       !remote_id ||
+      !session_id ||
       !amount ||
       !provider ||
       !game_id ||
-      !session_id ||
-      !gamesession_id ||
-      !transaction_id
-  ) {
-      return res.status(400).json({
-          status: "400",
-          msg: "Missing required parameters.",
-      });
-  }
+      !transaction_id ||
+      !gamesession_id
+    ) {
+      console.error("[ERROR] Missing required parameters for debit:", req.query);
+      return res.status(400).json({ status: "400", message: "Missing required parameters." });
+    }
 
-  // Handle Negative Amount
-  if (parseFloat(amount) < 0) {
-      return res.status(500).json({ status: "500", msg: "Negative amount not allowed!" });
-  }
-
-  try {
-      // Check for previous transaction
-      const previousResponse = await getPreviousResponse(transaction_id);
-      if (previousResponse) {
-          return res.status(200).json(previousResponse); // Return the same response for retries
-      }
-
-      // Fetch user
-      const user = await User.findOne({ remote_id });
+    if (parseFloat(amount) < 0) {
+      console.error("[ERROR] Negative amount is not allowed:", { username, amount });
+      return res.status(500).json({ status: "500", message: "Negative amount not allowed!" });
+    }
+  
+    try {
+      // Generate key for provider API validation
+      const params = {
+        callerId: API_USERNAME,
+        callerPassword: API_PASSWORD,
+        action: "debit",
+        remote_id,
+        username,
+        session_id,
+        amount: parseFloat(amount).toFixed(2),
+        provider,
+        game_id,
+        transaction_id,
+        gamesession_id,
+        currency,
+      };
+      params.key = generateKey(params);
+  
+      console.log("[DEBUG] Debit Request Parameters:", params);
+  
+      // Fetch the user from the local database
+      const user = await User.findOne({ username, remote_id });
       if (!user) {
-          return res.status(404).json({ status: "404", msg: "User not found." });
+        console.error("[ERROR] User not found for debit:", { username, remote_id });
+        return res.status(404).json({ status: "404", message: "User not found." });
       }
-
-      // Check balance
+  
+      // Check if the transaction already exists (idempotency check)
+      const existingTransaction = await Transfer.findOne({ transaction_id });
+      if (existingTransaction) {
+        console.log("[INFO] Repeated transaction, returning previous response:", transaction_id);
+        return res.status(200).json({
+          status: "200",
+          balance: user.balance.toFixed(2),
+          transaction_id,
+        });
+      }
+  
+      // Deduct the amount and update balance
       const newBalance = parseFloat(user.balance) - parseFloat(amount);
       if (newBalance < 0) {
-          return res.status(403).json({ status: "403", msg: "Insufficient funds." });
+        console.error("[ERROR] Insufficient funds for debit:", { username, amount, balance: user.balance });
+        return res.status(403).json({ status: "403", message: "Insufficient funds." });
       }
-
-      // Update balance
+  
       user.balance = newBalance;
       await user.save();
 
-      // Build response
-      const response = {
-          status: "200",
-          balance: newBalance.toFixed(2),
-          transaction_id,
-      };
+      const gameName = `Game_${game_id}`; // Replace with real game lookup if needed
 
-      // Save transaction details
-      await saveTransactionResponse(transaction_id, {
-          ...response,
-          provider,
-          game_id,
-          session_id,
-          gamesession_id,
-          currency,
+  
+      // Log the transaction in the database
+      const transfer = new Transfer({
+        senderId: user._id,
+        type: "debit",
+        transaction_id,
+        amount: parseFloat(amount),
+        gameId: game_id,
+        gameName: gameName,
+        balanceBefore: { sender: parseFloat(user.balance) + parseFloat(amount), receiver: null },
+        balanceAfter: { sender: newBalance, receiver: null },
       });
-
-      return res.status(200).json(response);
-  } catch (error) {
-      console.error("[ERROR] Debit Error:", error.message);
+      await transfer.save();
+  
+      console.log("[INFO] Debit transaction processed successfully:", transaction_id);
+  
+      // Respond to the provider
+      return res.status(200).json({
+        status: "200",
+        balance: newBalance.toFixed(2),
+        transaction_id,
+      });
+    } catch (error) {
+      console.error("[ERROR] Debit API Unexpected Error:", error.message);
+  
+      // Log Axios-specific error details
+      if (error.response) {
+        console.error("[DEBUG] Provider Error Response Data:", error.response.data);
+        console.error("[DEBUG] Provider Error Status Code:", error.response.status);
+        console.error("[DEBUG] Provider Error Headers:", error.response.headers);
+      } else if (error.request) {
+        console.error("[DEBUG] No response received from provider. Request details:", error.request);
+      } else {
+        console.error("[DEBUG] General Error:", error.message);
+      }
+  
+      // Respond with error status
       return res.status(500).json({
-          status: "500",
-          msg: "An error occurred while processing the debit.",
+        status: "500",
+        message: "An error occurred while processing the debit.",
       });
-  }
-};
+    }
+  };
 
+// Credit (Win) Endpoint
 exports.credit = async (req, res) => {
-  const {
+    const {
+      username,
       remote_id,
+      session_id,
       amount,
       provider,
       game_id,
-      session_id,
+      transaction_id,
       gamesession_id,
       currency = "EUR",
-      transaction_id,
-      key,
-  } = req.query;
-
-  // Validate Key
-  if (!validateKey(req.query, API_SALT)) {
-      return res.status(403).json({ status: "403", msg: "Hash Code Invalid" });
-  }
-
-  // Validate Required Parameters
-  if (
+    } = req.query;
+  
+    // Validate required parameters
+    if (
+      !username ||
       !remote_id ||
+      !session_id ||
       !amount ||
       !provider ||
       !game_id ||
-      !session_id ||
-      !gamesession_id ||
-      !transaction_id
-  ) {
-      return res.status(400).json({
-          status: "400",
-          msg: "Missing required parameters.",
-      });
-  }
+      !transaction_id ||
+      !gamesession_id
+    ) {
+      console.error("[ERROR] Missing required parameters for credit:", req.query);
+      return res.status(400).json({ status: "400", message: "Missing required parameters." });
+    }
 
-  // Handle Negative Amount
-  if (parseFloat(amount) < 0) {
-      return res.status(500).json({ status: "500", msg: "Negative amount not allowed!" });
-  }
-
-  try {
-      // Check for previous transaction
-      const previousResponse = await getPreviousResponse(transaction_id);
-      if (previousResponse) {
-          return res.status(200).json(previousResponse); // Return the same response for retries
-      }
-
-      // Fetch user
-      const user = await User.findOne({ remote_id });
+    if (parseFloat(amount) < 0) {
+      console.error("[ERROR] Negative amount is not allowed:", { username, amount });
+      return res.status(500).json({ status: "500", message: "Negative amount not allowed!" });
+    }
+  
+    try {
+      // Fetch the user
+      const user = await User.findOne({ username, remote_id });
       if (!user) {
-          return res.status(404).json({ status: "404", msg: "User not found." });
+        console.error("[ERROR] User not found for credit:", { username, remote_id });
+        return res.status(404).json({ status: "404", message: "User not found." });
       }
-
-      // Update balance
+  
+      // Check if the transaction already exists
+      const existingTransaction = await Transfer.findOne({ transaction_id });
+      if (existingTransaction) {
+        console.log("[INFO] Repeated transaction, returning previous response:", transaction_id);
+        return res.status(200).json({
+          status: "200",
+          balance: user.balance.toFixed(2),
+          transaction_id,
+        });
+      }
+  
+      // Credit the amount
       const newBalance = parseFloat(user.balance) + parseFloat(amount);
       user.balance = newBalance;
       await user.save();
 
-      // Build response
-      const response = {
-          status: "200",
-          balance: newBalance.toFixed(2),
-          transaction_id,
-      };
+      const gameName = `Game_${game_id}`; // Replace with real game lookup if needed
 
-      // Save transaction details
-      await saveTransactionResponse(transaction_id, {
-          ...response,
-          provider,
-          game_id,
-          session_id,
-          gamesession_id,
-          currency,
+      // Log the transaction
+      const transfer = new Transfer({
+        senderId: user._id,
+        type: "credit",
+        transaction_id,
+        amount: parseFloat(amount),
+        gameId: game_id,
+        gameName: gameName,
+        balanceBefore: { sender: parseFloat(user.balance) - parseFloat(amount), receiver: null },
+        balanceAfter: { sender: newBalance, receiver: null },
       });
-
-      return res.status(200).json(response);
-  } catch (error) {
-      console.error("[ERROR] Credit Error:", error.message);
+      await transfer.save();
+  
+      console.log("[INFO] Credit transaction processed successfully:", transaction_id);
+  
+      // Respond to the provider
+      return res.status(200).json({
+        status: "200",
+        balance: newBalance.toFixed(2),
+        transaction_id,
+      });
+    } catch (error) {
+      console.error("[ERROR] Credit API Unexpected Error:", error.message);
       return res.status(500).json({
-          status: "500",
-          msg: "An error occurred while processing the credit.",
+        status: "500",
+        message: "An error occurred while processing the credit.",
       });
-  }
-};
-
+    }
+  };
   
   
   
@@ -687,6 +742,8 @@ exports.rollback = async (req, res) => {
         type: "rollback",
         transaction_id: `${transaction_id}_rollback`,
         amount: originalTransaction.amount,
+        gameId: originalTransaction.gameId,
+        gameName: originalTransaction.gameName,
         balanceBefore: { sender: user.balance, receiver: null },
         balanceAfter: { sender: updatedBalance, receiver: null },
       });
