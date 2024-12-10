@@ -9,7 +9,7 @@ router.get("/gamesLocal", endpointController.getGameListFromDatabase); // Fetch 
 router.get("/get-all-games", endpointController.getAllGames); // Fetch all games
 
 // Game session routes
-router.post("/get-game", endpointController.getGame); // Get game launch URL and session details
+router.post("/get-game", validateRequestKey, endpointController.getGame); // Get game launch URL and session details
 
 // Player management routes
 router.post("/player-exists", endpointController.playerExists); // Check if a player exists
