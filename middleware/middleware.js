@@ -1,6 +1,15 @@
-const { validateKey } = require("../controllers/endpoints");
+
 const API_SALT = process.env.API_SALT;
 
+
+function validateKey(reqQuery, salt) {
+    const receivedKey = reqQuery.key;
+    const calculatedKey = generateKey(reqQuery, salt);
+    return receivedKey === calculatedKey;
+  }
+
+  
+  
 function validateRequestKey(req, res, next) {
     const { key } = req.query;
 

@@ -48,11 +48,9 @@ async function callProviderAPI(payload) {
     return crypto.createHash("sha1").update(hashInput).digest("hex");
 }
 
-function validateKey(reqQuery, salt) {
-  const receivedKey = reqQuery.key;
-  const calculatedKey = generateKey(reqQuery, salt);
-  return receivedKey === calculatedKey;
-}
+
+
+
 
 
 function handleInvalidKey(res) {
@@ -726,8 +724,6 @@ exports.rollback = async (req, res) => {
     }
   };
   ;
-  module.exports = {
-    validateKey,
-};
+  
   
   
